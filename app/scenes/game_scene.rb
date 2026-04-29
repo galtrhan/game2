@@ -36,8 +36,9 @@ class GameScene
       y:  spawn[:ty] * TILE_SIZE + 2,
       tx: spawn[:tx],
       ty: spawn[:ty],
-      facing:       :idle,
-      idle_timer: 0
+      facing:    :idle,
+      idle_timer: 0,
+      floor:      0
     }
     @vehicle        = spawn_vehicle(@player[:tx], @player[:ty])
     @mode           = :on_foot

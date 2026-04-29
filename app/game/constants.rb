@@ -20,6 +20,9 @@ module GameConstants
 
   PAUSE_ITEMS = ['Continue', 'Save', 'Load', 'Quit'].freeze
 
+  MAX_STRUCT_FLOOR =  3   # highest floor generated per structure
+  MIN_STRUCT_FLOOR = -2   # lowest floor generated per structure
+
   DZ_W      = (SCREEN_W * 0.5).to_i
   DZ_H      = (SCREEN_H * 0.5).to_i
   DZ_LEFT   = ((SCREEN_W - DZ_W) * 0.5).to_i

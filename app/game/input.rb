@@ -31,12 +31,24 @@ module GameInput
 
     if @mode == :on_foot
       if dx != 0
-        nx = (@player[:x] + dx * PLAYER_SPEED).clamp(0, MAP_PX - PLAYER_W)
-        @player[:x] = nx unless blocked_rect?(nx, @player[:y], PLAYER_W, PLAYER_H)
+        nx  = (@player[:x] + dx * PLAYER_SPEED).clamp(0, MAP_PX - PLAYER_W)
+        ntx = ((nx + (PLAYER_W * 0.5).to_i) / TILE_SIZE).to_i
+        nty = @player[:ty]
+        if !try_stair_transition(dx, 0) &&
+           !stair_exit_blocked?(ntx, nty, dx, 0) &&
+           !blocked_rect?(nx, @player[:y], PLAYER_W, PLAYER_H)
+          @player[:x] = nx
+        end
       end
       if dy != 0
-        ny = (@player[:y] + dy * PLAYER_SPEED).clamp(0, MAP_PY - PLAYER_H)
-        @player[:y] = ny unless blocked_rect?(@player[:x], ny, PLAYER_W, PLAYER_H)
+        ny  = (@player[:y] + dy * PLAYER_SPEED).clamp(0, MAP_PY - PLAYER_H)
+        ntx = @player[:tx]
+        nty = ((ny + (PLAYER_H * 0.5).to_i) / TILE_SIZE).to_i
+        if !try_stair_transition(0, dy) &&
+           !stair_exit_blocked?(ntx, nty, 0, dy) &&
+           !blocked_rect?(@player[:x], ny, PLAYER_W, PLAYER_H)
+          @player[:y] = ny
+        end
       end
       @player[:tx] = ((@player[:x] + (PLAYER_W * 0.5).to_i) / TILE_SIZE).to_i.clamp(0, TILES_X - 1)
       @player[:ty] = ((@player[:y] + (PLAYER_H * 0.5).to_i) / TILE_SIZE).to_i.clamp(0, TILES_Y - 1)
@@ -56,11 +68,11 @@ module GameInput
     elsif @mode == :in_vehicle && @vehicle
       if dx != 0
         nx = (@vehicle[:x] + dx * VEHICLE_SPEED).clamp(0, MAP_PX - VEHICLE_W)
-        @vehicle[:x] = nx unless blocked_rect?(nx, @vehicle[:y], VEHICLE_W, VEHICLE_H)
+        @vehicle[:x] = nx unless blocked_rect?(nx, @vehicle[:y], VEHICLE_W, VEHICLE_H, 0)
       end
       if dy != 0
         ny = (@vehicle[:y] + dy * VEHICLE_SPEED).clamp(0, MAP_PY - VEHICLE_H)
-        @vehicle[:y] = ny unless blocked_rect?(@vehicle[:x], ny, VEHICLE_W, VEHICLE_H)
+        @vehicle[:y] = ny unless blocked_rect?(@vehicle[:x], ny, VEHICLE_W, VEHICLE_H, 0)
       end
     end
   end
@@ -79,20 +91,42 @@ module GameInput
 
   def pause_accept
     case @pause_selected
-    when 0  # Continue
+    when 0
       @paused = false
-    when 1  # Save
+    when 1
       save_game
       @paused = false
-    when 2  # Load
+    when 2
       data = $gtk.read_file(SAVE_PATH)
-      if data
-        load_from_data(data)
-      end
+      load_from_data(data) if data
       @paused = false
-    when 3  # Quit
+    when 3
       @paused = false
       scene_manager.transition_to(:menu, fade_r: 255, fade_g: 255, fade_b: 255)
     end
+  end
+
+  private
+
+  # Returns true and changes floor if player is on a stair exit tile moving in exit direction.
+  def try_stair_transition(dx, dy)
+    return false unless @stair_data
+    data = @stair_data[[@player[:floor], @player[:tx], @player[:ty]]]
+    return false unless data && data[:is_exit]
+    return false unless dx == data[:exit_dx] && dy == data[:exit_dy]
+    new_floor = @player[:floor] + data[:delta]
+    return false unless @tilemap && @tilemap[new_floor]
+    @player[:floor] = new_floor
+    true
+  end
+
+  # Returns true if target tile is a stair exit that can't be entered from current position.
+  def stair_exit_blocked?(ntx, nty, dx, dy)
+    return false unless @stair_data
+    data = @stair_data[[@player[:floor], ntx, nty]]
+    return false unless data && data[:is_exit]
+    entry_tx = ntx - data[:exit_dx]
+    entry_ty = nty - data[:exit_dy]
+    @player[:tx] != entry_tx || @player[:ty] != entry_ty
   end
 end

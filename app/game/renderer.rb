@@ -8,16 +8,19 @@ module GameRenderer
     ty_min = (@cam_y.to_i / TILE_SIZE).to_i.clamp(0, TILES_Y - 1)
     ty_max = ((@cam_y.to_i + SCREEN_H) / TILE_SIZE).to_i.clamp(0, TILES_Y - 1)
 
+    cur_floor = @player[:floor]
     player_s = if @mode == :on_foot && @structure_map
-                 @structure_map[@player[:ty]][@player[:tx]]
+                 sm = @structure_map[cur_floor]
+                 sm && sm[@player[:ty]] && sm[@player[:ty]][@player[:tx]]
                end
 
     ty_min.upto(ty_max) do |ty|
       tx_min.upto(tx_max) do |tx|
         sx     = tx * TILE_SIZE - @cam_x
         sy     = ty * TILE_SIZE - @cam_y
-        tile   = @tilemap[ty][tx]
-        tile_s = @structure_map && @structure_map[ty][tx]
+        tile   = map_tile(tx, ty, cur_floor)
+        sm     = @structure_map && @structure_map[cur_floor]
+        tile_s = sm && sm[ty] && sm[ty][tx]
 
         # Determine what to actually show
         show = if player_s.nil?
@@ -37,6 +40,25 @@ module GameRenderer
           args.outputs.solids << { x: sx, y: sy, w: TILE_SIZE, h: TILE_SIZE, r: 200, g: 100, b: 50 }
         elsif show == :locked_door
           args.outputs.solids << { x: sx, y: sy, w: TILE_SIZE, h: TILE_SIZE, r: 160, g: 30, b: 30 }
+        elsif show == :stair_up
+          args.outputs.solids << { x: sx, y: sy, w: TILE_SIZE, h: TILE_SIZE, r: 50, g: 210, b: 180 }
+        elsif show == :stair_dn
+          args.outputs.solids << { x: sx, y: sy, w: TILE_SIZE, h: TILE_SIZE, r: 210, g: 160, b: 50 }
+        end
+
+        if show == :stair_up || show == :stair_dn
+          sd = @stair_data && @stair_data[[cur_floor, tx, ty]]
+          if sd
+            target_floor = cur_floor + sd[:delta]
+            args.outputs.labels << {
+              x: sx + (TILE_SIZE * 0.5).to_i,
+              y: sy + (TILE_SIZE * 0.5).to_i,
+              text: target_floor.to_s,
+              size_px: 11,
+              anchor_x: 0.5, anchor_y: 0.5,
+              r: 255, g: 255, b: 255
+            }
+          end
         end
 
         # Inside: dim exterior world with 50% black overlay
@@ -53,8 +75,15 @@ module GameRenderer
 
     args.outputs.labels << {
       x: 640, y: 710,
-      text: "ESC pause  I debug#{@debug ? ' [ON]' : ''}  #{@mode == :in_vehicle ? '[IN VEHICLE]' : ''}",
+      text: "ESC pause  I debug#{@debug ? ' [ON]' : ''}  Floor:#{@player[:floor]}  #{@mode == :in_vehicle ? '[IN VEHICLE]' : ''}",
       size_px: 16, anchor_x: 0.5,
+      r: 60, g: 60, b: 60
+    }
+
+    args.outputs.labels << {
+      x: 8, y: SCREEN_H - 8,
+      text: "FPS: #{args.gtk.current_framerate.to_i}",
+      size_px: 14, anchor_x: 0, anchor_y: 1,
       r: 60, g: 60, b: 60
     }
 

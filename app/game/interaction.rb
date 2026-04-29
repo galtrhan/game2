@@ -3,6 +3,7 @@ module GameInteraction
   def near_vehicle?
     return false unless @vehicle
     return false if @mode == :in_vehicle
+    return false unless @player[:floor] == 0
     dx = (@player[:x] + (PLAYER_W * 0.5).to_i) - (@vehicle[:x] + (VEHICLE_W * 0.5).to_i)
     dy = (@player[:y] + (PLAYER_H * 0.5).to_i) - (@vehicle[:y] + (VEHICLE_H * 0.5).to_i)
     dx * dx + dy * dy < INTERACT_DIST * INTERACT_DIST
