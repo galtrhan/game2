@@ -4,6 +4,7 @@ end
 
 require 'app/game/render/world_tiles'
 require 'app/game/render/entities'
+require 'app/game/render/npcs'
 require 'app/game/render/ui_overlay'
 
 module GameRenderer
@@ -17,6 +18,7 @@ module GameRenderer
     args.outputs.background_color = [200, 200, 200]
     render_world_tiles
     render_vehicle
+    render_npcs
     render_player
     render_hud
     render_pause_overlay if @paused

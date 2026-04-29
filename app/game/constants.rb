@@ -33,6 +33,15 @@ module GameConstants
   VEHICLE_H      = TILE_SIZE * 2
   VEHICLE_SPEED  = 10
   INTERACT_DIST  = TILE_SIZE * 2
+
+  # Simple red-triangle NPCs (same circle body as player).
+  NPC_COUNT                        = 6
+  NPC_SPEED                        = 2
+  NPC_DETECT_RADIUS_PX             = (5 * TILE_SIZE).freeze
+  NPC_LOS_STEPS                    = 40
+  NPC_SPAWN_TRIES                  = 800
+  NPC_MIN_SPAWN_TILES_FROM_PLAYER  = 4
+
   SAVE_PATH      = 'saves/game2.sav'
   MAP_SAVE_PATH  = 'saves/game2_map.json'
   DOT_SIZE       = 5

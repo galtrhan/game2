@@ -68,6 +68,8 @@ module GameSaveLoad
     @debug          = false
     @paused         = false
     @pause_selected = 0
+
+    spawn_npc_fleet
   end
 
   private

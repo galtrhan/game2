@@ -2,6 +2,7 @@ class GameScene
   include GameMap
   include GameSaveLoad
   include GameCollision
+  include GameNpcs
   include GameInteraction
   include GameInput
   include GameCamera
@@ -36,6 +37,7 @@ class GameScene
     input
     update_dynamic_zoom
     update_camera unless @paused
+    update_npcs
     render
   end
 
@@ -105,5 +107,7 @@ class GameScene
     vh = viewport_h
     @cam_x = (focus[:x] - half_w).clamp(0, [MAP_PX - vw, 0].max)
     @cam_y = (focus[:y] - half_h).clamp(0, [MAP_PY - vh, 0].max)
+
+    spawn_npc_fleet
   end
 end

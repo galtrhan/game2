@@ -33,6 +33,55 @@ module GameCollision
       return true if circle_aabb_overlap?(cx, cy, r, @vehicle[:x], @vehicle[:y], VEHICLE_W, VEHICLE_H)
     end
 
+    @npcs&.each do |o|
+      next unless o[:floor] == floor
+      ocx = o[:x] + PLAYER_W * 0.5
+      ocy = o[:y] + PLAYER_H * 0.5
+      return true if circles_overlap?(cx, cy, r, ocx, ocy, r)
+    end
+
+    false
+  end
+
+  # Same circle as player; locked doors always block; avoids player, vehicle, other NPCs.
+  def blocked_npc_circle?(x, y, floor, exclude_npc_index: nil)
+    cx = x + PLAYER_W * 0.5
+    cy = y + PLAYER_H * 0.5
+    r  = PLAYER_RADIUS
+
+    tx_lo = ((cx - r) / TILE_SIZE).floor.clamp(0, TILES_X - 1)
+    tx_hi = ((cx + r) / TILE_SIZE).ceil.clamp(0, TILES_X - 1)
+    ty_lo = ((cy - r) / TILE_SIZE).floor.clamp(0, TILES_Y - 1)
+    ty_hi = ((cy + r) / TILE_SIZE).ceil.clamp(0, TILES_Y - 1)
+
+    ty_lo.upto(ty_hi) do |ty|
+      tx_lo.upto(tx_hi) do |tx|
+        next unless circle_aabb_overlap?(
+          cx, cy, r,
+          tx * TILE_SIZE, ty * TILE_SIZE, TILE_SIZE, TILE_SIZE
+        )
+        return true if tile_npc_blocked?(tx, ty, floor)
+      end
+    end
+
+    if @vehicle && @vehicle[:collidable]
+      return true if circle_aabb_overlap?(cx, cy, r, @vehicle[:x], @vehicle[:y], VEHICLE_W, VEHICLE_H)
+    end
+
+    if @player && @player[:floor] == floor
+      pcx = @player[:x] + PLAYER_W * 0.5
+      pcy = @player[:y] + PLAYER_H * 0.5
+      return true if circles_overlap?(cx, cy, r, pcx, pcy, r)
+    end
+
+    @npcs&.each_with_index do |o, i|
+      next if exclude_npc_index && i == exclude_npc_index
+      next unless o[:floor] == floor
+      ocx = o[:x] + PLAYER_W * 0.5
+      ocy = o[:y] + PLAYER_H * 0.5
+      return true if circles_overlap?(cx, cy, r, ocx, ocy, r)
+    end
+
     false
   end
 
@@ -64,6 +113,18 @@ module GameCollision
     dx = cx - px
     dy = cy - py
     dx * dx + dy * dy <= r * r
+  end
+
+  def circles_overlap?(ax, ay, ar, bx, by, br)
+    dx = bx - ax
+    dy = by - ay
+    rr = ar + br
+    dx * dx + dy * dy < rr * rr
+  end
+
+  def tile_npc_blocked?(ctx, cty, floor)
+    t = map_tile(ctx, cty, floor)
+    t == :block || t == :locked_door
   end
 
   def tile_movement_blocked?(ctx, cty, floor)
