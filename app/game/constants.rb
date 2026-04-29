@@ -26,6 +26,8 @@ module GameConstants
   ZOOM_LERP_EXIT_INTERIOR = 0.022
   PLAYER_W       = TILE_SIZE - 4
   PLAYER_H       = TILE_SIZE - 4
+  # Inscribed circle in the PLAYER_W × PLAYER_H box (matches draw + on-foot collision).
+  PLAYER_RADIUS  = (PLAYER_W * 0.5).freeze
   PLAYER_SPEED   = 3
   VEHICLE_W      = TILE_SIZE
   VEHICLE_H      = TILE_SIZE * 2

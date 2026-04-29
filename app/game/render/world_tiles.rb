@@ -73,7 +73,7 @@ module GameRenderer
           args.outputs.solids << { x: sx, y: sy, w: tw, h: tw, r: r, g: g, b: b }
         end
 
-        if show == :stair_up || show == :stair_dn
+        if !@paused && (show == :stair_up || show == :stair_dn)
           if sd
             target_floor = cur_floor + sd[:delta]
             args.outputs.labels << {

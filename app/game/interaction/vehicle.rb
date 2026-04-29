@@ -19,7 +19,7 @@ module GameInteraction
       [@vehicle[:x] + 2,             @vehicle[:y] + VEHICLE_H + 2]
     ]
     candidates.each do |cx, cy|
-      unless blocked_rect?(cx, cy, PLAYER_W, PLAYER_H)
+      unless blocked_player_circle?(cx, cy)
         @player[:x] = cx
         @player[:y] = cy
         @mode = :on_foot

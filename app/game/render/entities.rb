@@ -30,20 +30,21 @@ module GameRenderer
     px = (@player[:x] - @cam_x) * z
     py = (@player[:y] - @cam_y) * z
 
-    args.outputs.solids << { x: px, y: py, w: pw, h: ph, r: 60, g: 120, b: 220 }
+    cx = px + pw * 0.5
+    cy = py + ph * 0.5
+    r_screen = PLAYER_RADIUS * z
+    render_filled_circle_scanlines(cx, cy, r_screen, 60, 120, 220)
 
     half_dot = (ds * 0.5).to_i
-    cx = px + (pw * 0.5).to_i
-    cy = py + (ph * 0.5).to_i
     a = @player[:face_angle]
-    orbit = ([pw, ph].min * 0.38).to_i
+    orbit = (r_screen * 0.7).to_i
     dot_x = if a.nil?
-              cx - half_dot
+              (cx - half_dot).to_i
             else
               (cx + Math.cos(a) * orbit - half_dot).to_i
             end
     dot_y = if a.nil?
-              cy - half_dot
+              (cy - half_dot).to_i
             else
               (cy + Math.sin(a) * orbit - half_dot).to_i
             end
@@ -80,5 +81,22 @@ module GameRenderer
     c = 55
     args.outputs.lines << [mx - arm, my, mx + arm, my, c, c, c, 255]
     args.outputs.lines << [mx, my - arm, mx, my + arm, c, c, c, 255]
+  end
+
+  private
+
+  # Filled disc from 1px-tall horizontal solids (no texture).
+  def render_filled_circle_scanlines(cx, cy, radius, cr, cg, cb)
+    ri = radius.round.clamp(1, 256)
+    r2 = ri * ri
+    ry = -ri
+    while ry <= ri
+      hw = Math.sqrt([0, r2 - ry * ry].max).floor
+      y = (cy + ry).round
+      x = (cx - hw).round
+      w = hw * 2 + 1
+      args.outputs.solids << { x: x, y: y, w: w, h: 1, r: cr, g: cg, b: cb }
+      ry += 1
+    end
   end
 end

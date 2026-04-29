@@ -58,7 +58,7 @@ module GameInput
         nty = @player[:ty]
         if !try_stair_transition(dx, 0) &&
            !stair_exit_blocked?(ntx, nty, dx, 0) &&
-           !blocked_rect?(nx, @player[:y], PLAYER_W, PLAYER_H)
+           !blocked_player_circle?(nx, @player[:y])
           @player[:x] = nx
         end
       end
@@ -68,7 +68,7 @@ module GameInput
         nty = ((ny + (PLAYER_H * 0.5).to_i) / TILE_SIZE).to_i
         if !try_stair_transition(0, dy) &&
            !stair_exit_blocked?(ntx, nty, 0, dy) &&
-           !blocked_rect?(@player[:x], ny, PLAYER_W, PLAYER_H)
+           !blocked_player_circle?(@player[:x], ny)
           @player[:y] = ny
         end
       end
