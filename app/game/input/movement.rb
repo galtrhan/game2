@@ -1,6 +1,14 @@
 module GameInput
   private
 
+  # Screen-space aim; uses camera + zoom (same math as render_player).
+  def update_player_face_angle_from_mouse
+    z = effective_zoom
+    pcx = (@player[:x] + (PLAYER_W * 0.5) - @cam_x.to_i) * z
+    pcy = (@player[:y] + (PLAYER_H * 0.5) - @cam_y.to_i) * z
+    @player[:face_angle] = Math.atan2(args.inputs.mouse.y - pcy, args.inputs.mouse.x - pcx)
+  end
+
   # Returns true and changes floor if player is on a stair exit tile moving in exit direction.
   def try_stair_transition(dx, dy)
     return false unless @stair_data

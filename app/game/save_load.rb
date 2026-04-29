@@ -1,7 +1,16 @@
 module GameSaveLoad
   include GameConstants
-  TILE_CHAR = { floor: 'f', block: 'b', door: 'd', locked_door: 'l', stair_up: 'u', stair_dn: 'v' }.freeze
-  CHAR_TILE = { 'f' => :floor, 'b' => :block, 'd' => :door, 'l' => :locked_door, 'u' => :stair_up, 'v' => :stair_dn }.freeze
+
+  TILE_CHAR = {
+    floor: 'f',
+    block: 'b',
+    door: 'd',
+    locked_door: 'l',
+    stair_up: 'u',
+    stair_dn: 'v'
+  }.freeze
+
+  CHAR_TILE = TILE_CHAR.invert.freeze
 
   def save_game
     v = @vehicle
@@ -42,7 +51,7 @@ module GameSaveLoad
     rebuild_outer_door_cells
 
     @player = { x: pairs['player_x'].to_i, y: pairs['player_y'].to_i, tx: 0, ty: 0,
-                facing: :idle, idle_timer: 0, floor: (pairs['player_floor'] || '0').to_i }
+                face_angle: 0.0, floor: (pairs['player_floor'] || '0').to_i }
     @player[:tx] = ((@player[:x] + (PLAYER_W * 0.5).to_i) / TILE_SIZE).to_i.clamp(0, TILES_X - 1)
     @player[:ty] = ((@player[:y] + (PLAYER_H * 0.5).to_i) / TILE_SIZE).to_i.clamp(0, TILES_Y - 1)
 

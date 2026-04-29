@@ -1,5 +1,15 @@
 module GameInput
   def input_pause(kb)
+    if args.inputs.mouse.moved
+      pt = args.inputs.mouse.point
+      PAUSE_ITEMS.length.times do |i|
+        if pt.inside_rect?(pause_menu_item_rect(i))
+          @pause_selected = i
+          break
+        end
+      end
+    end
+
     if kb.key_down.w || kb.key_down.up
       @pause_selected = (@pause_selected - 1) % PAUSE_ITEMS.length
     end
@@ -8,6 +18,17 @@ module GameInput
     end
     if kb.key_down.space || kb.key_down.enter || kb.key_down.e
       pause_accept
+    end
+
+    if args.inputs.mouse.click
+      click = args.inputs.mouse.click
+      PAUSE_ITEMS.length.times do |i|
+        next unless click.point.inside_rect?(pause_menu_item_rect(i))
+
+        @pause_selected = i
+        pause_accept
+        break
+      end
     end
   end
 

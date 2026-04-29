@@ -25,6 +25,16 @@ class MenuScene
 
     kb = args.inputs.keyboard
 
+    if args.inputs.mouse.moved
+      pt = args.inputs.mouse.point
+      @buttons.each_with_index do |_, i|
+        if pt.inside_rect?(menu_button_rect(i))
+          @selected = i
+          break
+        end
+      end
+    end
+
     if kb.key_down.w || kb.key_down.up
       @selected = (@selected - 1) % @buttons.length
     end
@@ -35,6 +45,17 @@ class MenuScene
 
     if kb.key_down.space || kb.key_down.enter || kb.key_down.e
       accept
+    end
+
+    if args.inputs.mouse.click
+      click = args.inputs.mouse.click
+      @buttons.each_with_index do |_, i|
+        next unless click.point.inside_rect?(menu_button_rect(i))
+
+        @selected = i
+        accept
+        break
+      end
     end
   end
 
@@ -58,10 +79,11 @@ class MenuScene
 
     @buttons.each_with_index do |btn, i|
       active = i == @selected
-      y = 400 - (i * 60)
+      rect = menu_button_rect(i)
+      y = rect[:y] + 15
 
       if active
-        args.outputs.solids << { x: 540, y: y - 15, w: 200, h: 44, r: 30, g: 30, b: 30 }
+        args.outputs.solids << rect.merge(r: 30, g: 30, b: 30)
       end
 
       args.outputs.labels << {
@@ -74,5 +96,10 @@ class MenuScene
         b: active ? 255 : 60
       }
     end
+  end
+
+  def menu_button_rect(i)
+    y = 400 - (i * 60)
+    { x: 540, y: y - 15, w: 200, h: 44 }
   end
 end

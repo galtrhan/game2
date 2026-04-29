@@ -1,4 +1,27 @@
 module GameMap
+  # True when the player (or vehicle center on floor 0) stands on a structure-owned tile.
+  def player_in_interior?
+    return false unless @structure_map && @player
+
+    fl = (@mode == :in_vehicle && @vehicle) ? 0 : @player[:floor]
+    tx, ty =
+      if @mode == :in_vehicle && @vehicle
+        cx = (@vehicle[:x] + (VEHICLE_W * 0.5).to_i) / TILE_SIZE
+        cy = (@vehicle[:y] + (VEHICLE_H * 0.5).to_i) / TILE_SIZE
+        [cx, cy]
+      else
+        [@player[:tx], @player[:ty]]
+      end
+
+    return false if tx < 0 || tx >= TILES_X || ty < 0 || ty >= TILES_Y
+
+    smap = @structure_map[fl]
+    return false unless smap
+
+    row = smap[ty]
+    row && !row[tx].nil?
+  end
+
   def map_tile(tx, ty, floor = nil)
     floor ||= @player ? @player[:floor] : 0
     return :block if tx < 0 || tx >= TILES_X || ty < 0 || ty >= TILES_Y
@@ -8,9 +31,19 @@ module GameMap
   end
 
   def find_spawn
-    free = []
-    TILES_Y.times { |ty| TILES_X.times { |tx| free << { tx: tx, ty: ty } if map_tile(tx, ty, 0) == :floor } }
-    free.empty? ? { tx: 0, ty: 0 } : free[rand(free.length)]
+    FIND_SPAWN_RANDOM_TRIES.times do
+      tx = rand(TILES_X)
+      ty = rand(TILES_Y)
+      return { tx: tx, ty: ty } if map_tile(tx, ty, 0) == :floor
+    end
+
+    # Rare fallback: sparse floor — scan without allocating a huge array.
+    TILES_Y.times do |ty|
+      TILES_X.times do |tx|
+        return { tx: tx, ty: ty } if map_tile(tx, ty, 0) == :floor
+      end
+    end
+    { tx: 0, ty: 0 }
   end
 
   def spawn_vehicle(player_tx, player_ty)

@@ -30,6 +30,7 @@ module GameRenderer
       sm_row  = floor_sm && floor_sm[ty]
 
       tx_min.upto(tx_max) do |tx|
+        sd = nil
         sx = (tx * TILE_SIZE - cam_x_i) * z
         sy = (ty * TILE_SIZE - cam_y_i) * z
 
@@ -59,14 +60,20 @@ module GameRenderer
           args.outputs.solids << { x: sx, y: sy, w: tw, h: tw, r: 200, g: 100, b: 50 }
         elsif show == :locked_door
           args.outputs.solids << { x: sx, y: sy, w: tw, h: tw, r: 160, g: 30, b: 30 }
-        elsif show == :stair_up
-          args.outputs.solids << { x: sx, y: sy, w: tw, h: tw, r: 50, g: 210, b: 180 }
-        elsif show == :stair_dn
-          args.outputs.solids << { x: sx, y: sy, w: tw, h: tw, r: 210, g: 160, b: 50 }
+        elsif show == :stair_up || show == :stair_dn
+          sd = stairs && stairs[[cur_floor, tx, ty]]
+          r, g, b = show == :stair_up ? [50, 210, 180] : [210, 160, 50]
+          # Entry tile (non-exit): blend 20% toward white so it reads apart from the exit tile.
+          if sd && !sd[:is_exit]
+            t = 0.2
+            r = (r + (255 - r) * t).to_i
+            g = (g + (255 - g) * t).to_i
+            b = (b + (255 - b) * t).to_i
+          end
+          args.outputs.solids << { x: sx, y: sy, w: tw, h: tw, r: r, g: g, b: b }
         end
 
         if show == :stair_up || show == :stair_dn
-          sd = stairs && stairs[[cur_floor, tx, ty]]
           if sd
             target_floor = cur_floor + sd[:delta]
             args.outputs.labels << {

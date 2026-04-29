@@ -33,15 +33,20 @@ module GameRenderer
     args.outputs.solids << { x: px, y: py, w: pw, h: ph, r: 60, g: 120, b: 220 }
 
     half_dot = (ds * 0.5).to_i
-    cx = px + (pw * 0.5).to_i - half_dot
-    cy = py + (ph * 0.5).to_i - half_dot
-    dot_x, dot_y = case @player[:facing]
-                   when :right then [px + pw - ds - z, cy]
-                   when :left  then [px + z,                       cy]
-                   when :up    then [cx, py + ph - ds - z]
-                   when :down  then [cx, py + z]
-                   else             [cx, cy]
-                   end
+    cx = px + (pw * 0.5).to_i
+    cy = py + (ph * 0.5).to_i
+    a = @player[:face_angle]
+    orbit = ([pw, ph].min * 0.38).to_i
+    dot_x = if a.nil?
+              cx - half_dot
+            else
+              (cx + Math.cos(a) * orbit - half_dot).to_i
+            end
+    dot_y = if a.nil?
+              cy - half_dot
+            else
+              (cy + Math.sin(a) * orbit - half_dot).to_i
+            end
     args.outputs.solids << { x: dot_x, y: dot_y, w: ds, h: ds, r: 255, g: 255, b: 255 }
 
     if @debug
@@ -63,5 +68,17 @@ module GameRenderer
         r: 255, g: 220, b: 0
       }
     end
+  end
+
+  # Custom pointer while on foot (system cursor hidden in GameRenderer#render).
+  def render_aim_crosshair
+    return if @mode != :on_foot || @paused
+
+    mx = args.inputs.mouse.x
+    my = args.inputs.mouse.y
+    arm = 6
+    c = 55
+    args.outputs.lines << [mx - arm, my, mx + arm, my, c, c, c, 255]
+    args.outputs.lines << [mx, my - arm, mx, my + arm, c, c, c, 255]
   end
 end

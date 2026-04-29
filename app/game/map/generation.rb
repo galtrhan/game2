@@ -1,34 +1,61 @@
 module GameMap
+  # Synchronous full generation (e.g. console load). Prefer map_generation_begin! +
+  # map_generation_step! for large maps to spread work across ticks.
   def generate_map
-    generate_map_impl
-  end
-
-  def generate_map_impl
-    srand(@map_seed)
-    @tilemap               = {}
-    @structure_map         = {}
-    @stair_data            = {}
-    @generated_struct_floors = {}
-    init_floor(0, :floor)
-
-    struct_id = 0
-    y = 1
-    while y < TILES_Y - 1
-      x = 1
-      while x < TILES_X - 1
-        bw = [10 + rand(9), TILES_X - 1 - x].min
-        bh = [10 + rand(9), TILES_Y - 1 - y].min
-        place_structure(x, y, bw, bh, struct_id, 0, 0)
-        struct_id += 1
-        x += bw + 2 + rand(19)
-      end
-      y += (2 + rand(9)) + 2 + rand(19)
-    end
-    rebuild_outer_door_cells
+    map_generation_begin!
+    until map_generation_step!(1 << 28); end
     @tilemap
   end
 
+  def map_generation_begin!
+    @outer_door_cells = {}
+    @map_gen_y = 1
+    @map_gen_x = 1
+    @map_gen_struct_id = 0
+    @map_gen_done = false
+
+    srand(@map_seed)
+    @tilemap                 = {}
+    @structure_map           = {}
+    @stair_data              = {}
+    @generated_struct_floors = {}
+    init_floor(0, :floor)
+  end
+
+  # Places up to `structures_budget` top-level buildings; returns true when finished.
+  def map_generation_step!(structures_budget)
+    return true if @map_gen_done
+
+    placed = 0
+    while @map_gen_y < TILES_Y - 1 && placed < structures_budget
+      while @map_gen_x < TILES_X - 1 && placed < structures_budget
+        bw = [10 + rand(9), TILES_X - 1 - @map_gen_x].min
+        bh = [10 + rand(9), TILES_Y - 1 - @map_gen_y].min
+        place_structure(@map_gen_x, @map_gen_y, bw, bh, @map_gen_struct_id, 0, 0)
+        @map_gen_struct_id += 1
+        @map_gen_x += bw + 2 + rand(19)
+        placed += 1
+      end
+      if @map_gen_x >= TILES_X - 1
+        @map_gen_x = 1
+        @map_gen_y += (2 + rand(9)) + 2 + rand(19)
+      end
+    end
+
+    if @map_gen_y >= TILES_Y - 1
+      @map_gen_done = true
+      return true
+    end
+    false
+  end
+
   private
+
+  def mark_outer_door_if_needed(floor, tx, ty, sx, sy, bw, bh)
+    return unless tx == sx || tx == sx + bw - 1 || ty == sy || ty == sy + bh - 1
+
+    @outer_door_cells[[floor, tx, ty]] = true
+  end
 
   def init_floor(floor, default_tile)
     @tilemap[floor]       = Array.new(TILES_Y) { Array.new(TILES_X, default_tile) }
@@ -75,14 +102,20 @@ module GameMap
     col_dividers.each do |dx|
       row_bands.each do |band|
         door_dy = band.to_a[rand(band.size)]
-        map[y + door_dy][x + dx] = rand(2) == 0 ? :locked_door : :door
+        ty = y + door_dy
+        tx = x + dx
+        map[ty][tx] = rand(2) == 0 ? :locked_door : :door
+        mark_outer_door_if_needed(floor, tx, ty, x, y, bw, bh)
       end
     end
 
     row_dividers.each do |dy|
       col_bands.each do |band|
         door_dx = band.to_a[rand(band.size)]
-        map[y + dy][x + door_dx] = rand(2) == 0 ? :locked_door : :door
+        ty = y + dy
+        tx = x + door_dx
+        map[ty][tx] = rand(2) == 0 ? :locked_door : :door
+        mark_outer_door_if_needed(floor, tx, ty, x, y, bw, bh)
       end
     end
 
@@ -96,7 +129,10 @@ module GameMap
         end
       end
       dt = border[rand(border.length)]
-      map[dt[1]][dt[0]] = :door if dt
+      if dt
+        map[dt[1]][dt[0]] = :door
+        mark_outer_door_if_needed(floor, dt[0], dt[1], x, y, bw, bh)
+      end
     end
 
     place_stairs(x, y, bw, bh, struct_id, floor, col_dividers, row_dividers)

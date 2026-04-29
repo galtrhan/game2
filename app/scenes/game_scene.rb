@@ -13,6 +13,20 @@ class GameScene
 
   def tick
     defaults
+
+    if @map_gen_in_progress
+      if map_generation_step!(MAP_GEN_STRUCTURES_PER_TICK)
+        @map_gen_in_progress = false
+        if @map_gen_load_pairs
+          apply_loaded_save_after_map!(@map_gen_load_pairs)
+          @map_gen_load_pairs = nil
+        else
+          finalize_new_game_after_map!
+        end
+        @initialized = true
+      end
+    end
+
     if !@initialized && show_minimal_loading_screen?
       render_minimal_loading
       return
@@ -26,11 +40,12 @@ class GameScene
   end
 
   def show_minimal_loading_screen?
-    @show_loading_save || @new_game_show_generating_screen
+    @show_loading_save || @new_game_show_generating_screen || @map_gen_in_progress
   end
 
   def defaults
     return if @initialized
+    return if @map_gen_in_progress
 
     if scene_manager.pending_load_data
       if @deferred_save_raw.nil?
@@ -45,50 +60,50 @@ class GameScene
       @show_loading_save = false
       pairs = parse_save_pairs(raw)
       @map_seed = pairs['seed'].to_i
-      generate_map
-      apply_loaded_save_after_map!(pairs)
-      @initialized = true
+      map_generation_begin!
+      @map_gen_in_progress = true
+      @map_gen_load_pairs = pairs
       return
     end
 
-    # New game: first tick only shows UI; next tick runs synchronous generate_map (no Fiber).
+    # New game: first tick only shows UI; next ticks stream map_generation_step! until done.
     if @new_game_show_generating_screen
       @new_game_show_generating_screen = false
       @map_seed ||= rand(99999)
-      generate_map
-
-      spawn = find_spawn
-      @player = {
-        x:  spawn[:tx] * TILE_SIZE + 2,
-        y:  spawn[:ty] * TILE_SIZE + 2,
-        tx: spawn[:tx],
-        ty: spawn[:ty],
-        facing:     :idle,
-        idle_timer: 0,
-        floor:      0
-      }
-      @vehicle        = spawn_vehicle(@player[:tx], @player[:ty])
-      @mode           = :on_foot
-      @debug          = false
-      @paused         = false
-      @pause_selected = 0
-      @zoom                  = ZOOM_DEFAULT
-      @full_speed_run_ticks  = 0
-
-      focus  = camera_focus
-      half_w = (viewport_w * 0.5).to_i
-      half_h = (viewport_h * 0.5).to_i
-      vw = viewport_w
-      vh = viewport_h
-      @cam_x = (focus[:x] - half_w).clamp(0, [MAP_PX - vw, 0].max)
-      @cam_y = (focus[:y] - half_h).clamp(0, [MAP_PY - vh, 0].max)
-
-      @initialized = true
+      map_generation_begin!
+      @map_gen_in_progress = true
       return
     end
 
     @map_seed ||= rand(99999)
     @new_game_show_generating_screen = true
     return
+  end
+
+  def finalize_new_game_after_map!
+    spawn = find_spawn
+    @player = {
+      x:  spawn[:tx] * TILE_SIZE + 2,
+      y:  spawn[:ty] * TILE_SIZE + 2,
+      tx: spawn[:tx],
+      ty: spawn[:ty],
+      face_angle: 0.0,
+      floor:      0
+    }
+    @vehicle        = spawn_vehicle(@player[:tx], @player[:ty])
+    @mode           = :on_foot
+    @debug          = false
+    @paused         = false
+    @pause_selected = 0
+    @zoom                  = ZOOM_DEFAULT
+    @full_speed_run_ticks  = 0
+
+    focus  = camera_focus
+    half_w = (viewport_w * 0.5).to_i
+    half_h = (viewport_h * 0.5).to_i
+    vw = viewport_w
+    vh = viewport_h
+    @cam_x = (focus[:x] - half_w).clamp(0, [MAP_PX - vw, 0].max)
+    @cam_y = (focus[:y] - half_h).clamp(0, [MAP_PY - vh, 0].max)
   end
 end

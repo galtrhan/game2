@@ -37,12 +37,21 @@ module GameInput
 
     dx = 0
     dy = 0
-    dx = -1 if kb.a || kb.left
-    dx =  1 if kb.d || kb.right
-    dy =  1 if kb.w || kb.up
-    dy = -1 if kb.s || kb.down
+    if @mode == :on_foot
+      dx = -1 if kb.a
+      dx =  1 if kb.d
+      dy =  1 if kb.w
+      dy = -1 if kb.s
+    else
+      dx = -1 if kb.a || kb.left
+      dx =  1 if kb.d || kb.right
+      dy =  1 if kb.w || kb.up
+      dy = -1 if kb.s || kb.down
+    end
 
     if @mode == :on_foot
+      update_player_face_angle_from_mouse
+
       if dx != 0
         nx  = (@player[:x] + dx * PLAYER_SPEED).clamp(0, MAP_PX - PLAYER_W)
         ntx = ((nx + (PLAYER_W * 0.5).to_i) / TILE_SIZE).to_i
@@ -66,18 +75,6 @@ module GameInput
       @player[:tx] = ((@player[:x] + (PLAYER_W * 0.5).to_i) / TILE_SIZE).to_i.clamp(0, TILES_X - 1)
       @player[:ty] = ((@player[:y] + (PLAYER_H * 0.5).to_i) / TILE_SIZE).to_i.clamp(0, TILES_Y - 1)
 
-      if dx != 0 || dy != 0
-        @player[:facing] = if dx > 0 then :right
-                           elsif dx < 0 then :left
-                           elsif dy > 0 then :up
-                           else :down
-                           end
-        @player[:idle_timer] = 0
-      else
-        @player[:idle_timer] = (@player[:idle_timer] || 0) + 1
-        @player[:facing] = :idle if @player[:idle_timer] >= IDLE_FRAMES
-      end
-
     elsif @mode == :in_vehicle && @vehicle
       if dx != 0
         nx = (@vehicle[:x] + dx * VEHICLE_SPEED).clamp(0, MAP_PX - VEHICLE_W)
@@ -89,14 +86,8 @@ module GameInput
       end
     end
 
-    # Sustained run timer: any movement input this frame (same as max-speed intent).
-    # Using intent avoids streak resets when a single frame doesn't change position (collision edge).
-    movement_intent =
-      if @mode == :on_foot || (@mode == :in_vehicle && @vehicle)
-        dx != 0 || dy != 0
-      else
-        false
-      end
+    # Sustained movement while driving — used only for optional wide (1x) zoom in vehicle.
+    movement_intent = (@mode == :in_vehicle && @vehicle) && (dx != 0 || dy != 0)
 
     if movement_intent
       @full_speed_run_ticks = (@full_speed_run_ticks || 0) + 1

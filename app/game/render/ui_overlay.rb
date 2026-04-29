@@ -2,7 +2,7 @@ module GameRenderer
   def render_hud
     args.outputs.labels << {
       x: 640, y: 710,
-      text: "ESC pause  I debug#{@debug ? ' [ON]' : ''}  Floor:#{@player[:floor]}  #{@mode == :in_vehicle ? '[IN VEHICLE]' : ''}",
+      text: "ESC pause  I debug#{@debug ? ' [ON]' : ''}  Floor:#{@player[:floor]}  #{@mode == :in_vehicle ? '[IN VEHICLE]' : 'WASD  aim:mouse'}",
       font: UI_FONT,
       size_px: 16, anchor_x: 0.5,
       r: 60, g: 60, b: 60
@@ -23,10 +23,11 @@ module GameRenderer
       r: 0, g: 0, b: 0, a: 150
     }.solid!
 
-    panel_w = 300
-    panel_h = 310
-    panel_x = ((SCREEN_W - panel_w) * 0.5).to_i
-    panel_y = ((SCREEN_H - panel_h) * 0.5).to_i
+    panel = pause_menu_panel
+    panel_x = panel[:x]
+    panel_y = panel[:y]
+    panel_w = panel[:w]
+    panel_h = panel[:h]
 
     args.outputs.solids << { x: panel_x, y: panel_y, w: panel_w, h: panel_h, r: 245, g: 245, b: 245 }
 
@@ -39,10 +40,11 @@ module GameRenderer
 
     PAUSE_ITEMS.each_with_index do |label, i|
       active = i == @pause_selected
-      by     = panel_y + panel_h - 75 - (i * 58)
+      row    = pause_menu_item_rect(i)
+      by     = row[:y] + 16
 
       if active
-        args.outputs.solids << { x: panel_x + 10, y: by - 16, w: panel_w - 20, h: 44, r: 30, g: 30, b: 30 }
+        args.outputs.solids << row.merge(r: 30, g: 30, b: 30)
       end
 
       args.outputs.labels << {

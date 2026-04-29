@@ -4,7 +4,15 @@ module GameCamera
   def effective_zoom
     z = @zoom
     z = ZOOM_DEFAULT if z.nil?
-    z.clamp(ZOOM_MIN, ZOOM_DEFAULT)
+    hi = if player_in_interior?
+            ZOOM_INTERIOR
+          elsif z > ZOOM_DEFAULT
+            # Outside but still easing down from interior — do not clamp display to 2x yet.
+            ZOOM_INTERIOR
+          else
+            ZOOM_DEFAULT
+          end
+    z.clamp(ZOOM_MIN, hi)
   end
 
   # Visible world size (float) for current zoom.
@@ -31,13 +39,25 @@ module GameCamera
       @full_speed_run_ticks = 0
     end
 
-    # Streak is driven by movement intent in input (keys held); resets when idle.
-    # When ticks reach the delay while still moving, ease toward 1x (zoom out / wider view).
-    moving_eligible_for_wide = (@full_speed_run_ticks || 0) >= FULL_SPEED_ZOOM_DELAY_TICKS
+    if player_in_interior?
+      target = ZOOM_INTERIOR
+      lerp = ZOOM_LERP
+      @zoom += (target - @zoom) * lerp
+      @zoom = target if (target - @zoom).abs < 0.002
+      @zoom = @zoom.clamp(ZOOM_MIN, ZOOM_INTERIOR)
+      return
+    end
+
+    # Outside: 1x zoom only while driving after sustained movement (not on foot).
+    moving_eligible_for_wide =
+      (@mode == :in_vehicle && @vehicle) &&
+      (@full_speed_run_ticks || 0) >= FULL_SPEED_ZOOM_DELAY_TICKS
 
     target = moving_eligible_for_wide ? ZOOM_MIN : ZOOM_DEFAULT
 
-    lerp = if target == ZOOM_DEFAULT && @zoom < ZOOM_DEFAULT
+    lerp = if @zoom > ZOOM_DEFAULT
+             ZOOM_LERP_EXIT_INTERIOR
+           elsif target == ZOOM_DEFAULT && @zoom < ZOOM_DEFAULT
              ZOOM_LERP_RETURN
            else
              ZOOM_LERP
@@ -45,7 +65,12 @@ module GameCamera
 
     @zoom += (target - @zoom) * lerp
     @zoom = target if (target - @zoom).abs < 0.002
-    @zoom = @zoom.clamp(ZOOM_MIN, ZOOM_DEFAULT)
+    # Allow @zoom above 2 while easing from interior; only then clamp to outdoor cap.
+    @zoom = if @zoom > ZOOM_DEFAULT
+              @zoom.clamp(ZOOM_MIN, ZOOM_INTERIOR)
+            else
+              @zoom.clamp(ZOOM_MIN, ZOOM_DEFAULT)
+            end
   end
 
   def update_camera

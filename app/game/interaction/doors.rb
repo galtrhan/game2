@@ -39,11 +39,15 @@ module GameInteraction
   private
 
   def player_facing_delta
-    case @player[:facing]
-    when :right then [1, 0]
-    when :left then [-1, 0]
-    when :up then [0, 1]
-    when :down then [0, -1]
+    a = @player[:face_angle]
+    return nil if a.nil?
+
+    c = Math.cos(a)
+    s = Math.sin(a)
+    if c.abs >= s.abs
+      c >= 0 ? [1, 0] : [-1, 0]
+    else
+      s >= 0 ? [0, 1] : [0, -1]
     end
   end
 end
