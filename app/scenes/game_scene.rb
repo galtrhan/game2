@@ -20,6 +20,7 @@ class GameScene
     return unless @initialized
 
     input
+    update_dynamic_zoom
     update_camera unless @paused
     render
   end
@@ -71,12 +72,16 @@ class GameScene
       @debug          = false
       @paused         = false
       @pause_selected = 0
+      @zoom                  = ZOOM_DEFAULT
+      @full_speed_run_ticks  = 0
 
       focus  = camera_focus
-      half_w = (SCREEN_W * 0.5).to_i
-      half_h = (SCREEN_H * 0.5).to_i
-      @cam_x = (focus[:x] - half_w).clamp(0, MAP_PX - SCREEN_W)
-      @cam_y = (focus[:y] - half_h).clamp(0, MAP_PY - SCREEN_H)
+      half_w = (viewport_w * 0.5).to_i
+      half_h = (viewport_h * 0.5).to_i
+      vw = viewport_w
+      vh = viewport_h
+      @cam_x = (focus[:x] - half_w).clamp(0, [MAP_PX - vw, 0].max)
+      @cam_y = (focus[:y] - half_h).clamp(0, [MAP_PY - vh, 0].max)
 
       @initialized = true
       return

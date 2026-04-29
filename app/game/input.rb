@@ -7,7 +7,9 @@ require 'app/game/input/pause'
 
 module GameInput
   def input
-    return if scene_manager.transitioning?
+    if scene_manager.transitioning?
+      return
+    end
 
     kb = args.inputs.keyboard
 
@@ -85,6 +87,21 @@ module GameInput
         ny = (@vehicle[:y] + dy * VEHICLE_SPEED).clamp(0, MAP_PY - VEHICLE_H)
         @vehicle[:y] = ny unless blocked_rect?(@vehicle[:x], ny, VEHICLE_W, VEHICLE_H, 0)
       end
+    end
+
+    # Sustained run timer: any movement input this frame (same as max-speed intent).
+    # Using intent avoids streak resets when a single frame doesn't change position (collision edge).
+    movement_intent =
+      if @mode == :on_foot || (@mode == :in_vehicle && @vehicle)
+        dx != 0 || dy != 0
+      else
+        false
+      end
+
+    if movement_intent
+      @full_speed_run_ticks = (@full_speed_run_ticks || 0) + 1
+    else
+      @full_speed_run_ticks = 0
     end
   end
 end

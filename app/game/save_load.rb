@@ -51,8 +51,11 @@ module GameSaveLoad
     end
 
     @mode           = pairs['mode'] == 'in_vehicle' ? :in_vehicle : :on_foot
-    @cam_x          = pairs['cam_x'].to_i
-    @cam_y          = pairs['cam_y'].to_i
+    @zoom                  = ZOOM_DEFAULT
+    @full_speed_run_ticks  = 0
+    # Clamp for tightest zoom-out (1x); update_camera may refine once @zoom is applied.
+    @cam_x          = pairs['cam_x'].to_i.clamp(0, [MAP_PX - SCREEN_W, 0].max)
+    @cam_y          = pairs['cam_y'].to_i.clamp(0, [MAP_PY - SCREEN_H, 0].max)
     @debug          = false
     @paused         = false
     @pause_selected = 0

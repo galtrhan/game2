@@ -10,33 +10,34 @@ module GameCollision
   def blocked_rect?(x, y, w, h, floor = nil)
     floor ||= @player ? @player[:floor] : 0
     r = CORNER_RADIUS
-    tile_hit = [
-      [x + r,         y + r        ],
-      [x + w - 1 - r, y + r        ],
-      [x + r,         y + h - 1 - r],
-      [x + w - 1 - r, y + h - 1 - r]
-    ].any? do |cx, cy|
-      ctx = (cx / TILE_SIZE).to_i
-      cty = (cy / TILE_SIZE).to_i
-      t = map_tile(ctx, cty, floor)
-      case t
-      when :block
-        true
-      when :locked_door
-        # Standing on a door then locking it traps the hitbox on locked_door; allow leaving that tile only.
-        next false if @mode == :on_foot && @player && ctx == @player[:tx] && cty == @player[:ty]
+    x0 = x + r
+    y0 = y + r
+    x1 = x + w - 1 - r
+    y1 = y + h - 1 - r
 
-        true
-      else
-        false
-      end
-    end
-    return true if tile_hit
+    return true if movement_corner_blocked?((x0 / TILE_SIZE).to_i, (y0 / TILE_SIZE).to_i, floor)
+    return true if movement_corner_blocked?((x1 / TILE_SIZE).to_i, (y0 / TILE_SIZE).to_i, floor)
+    return true if movement_corner_blocked?((x0 / TILE_SIZE).to_i, (y1 / TILE_SIZE).to_i, floor)
+    return true if movement_corner_blocked?((x1 / TILE_SIZE).to_i, (y1 / TILE_SIZE).to_i, floor)
 
     if @mode == :on_foot && @vehicle && @vehicle[:collidable]
       return rects_overlap?(x, y, w, h, @vehicle[:x], @vehicle[:y], VEHICLE_W, VEHICLE_H)
     end
 
     false
+  end
+
+  private
+
+  def movement_corner_blocked?(ctx, cty, floor)
+    t = map_tile(ctx, cty, floor)
+    case t
+    when :block
+      true
+    when :locked_door
+      !(@mode == :on_foot && @player && ctx == @player[:tx] && cty == @player[:ty])
+    else
+      false
+    end
   end
 end
