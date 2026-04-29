@@ -8,12 +8,13 @@ module GameNpcs
     px = @player[:tx]
     py = @player[:ty]
     min_d2 = NPC_MIN_SPAWN_TILES_FROM_PLAYER * NPC_MIN_SPAWN_TILES_FROM_PLAYER
+    area   = CHUNK_SIZE * (INITIAL_CHUNK_RADIUS * 2 + 1)
 
     NPC_COUNT.times do
       placed = false
       NPC_SPAWN_TRIES.times do
-        tx = rand(TILES_X)
-        ty = rand(TILES_Y)
+        tx = rand(area)
+        ty = rand(area)
         next unless map_tile(tx, ty, 0) == :floor
 
         d2 = (tx - px) * (tx - px) + (ty - py) * (ty - py)
@@ -106,8 +107,8 @@ module GameNpcs
       t = i / steps.to_f
       wx = x0 + dx * t
       wy = y0 + dy * t
-      tx = (wx / TILE_SIZE).floor.clamp(0, TILES_X - 1)
-      ty = (wy / TILE_SIZE).floor.clamp(0, TILES_Y - 1)
+      tx = (wx / TILE_SIZE).floor
+      ty = (wy / TILE_SIZE).floor
       return false if tile_npc_blocked?(tx, ty, n[:floor])
     end
     true
@@ -132,9 +133,8 @@ module GameNpcs
   def npc_try_axis(n, idx, dx, dy)
     return if dx == 0 && dy == 0
 
-    nx = (n[:x] + dx).clamp(0, MAP_PX - PLAYER_W)
-    ny = (n[:y] + dy).clamp(0, MAP_PY - PLAYER_H)
-    return if nx == n[:x] && ny == n[:y]
+    nx = n[:x] + dx
+    ny = n[:y] + dy
 
     unless blocked_npc_circle?(nx, ny, n[:floor], exclude_npc_index: idx)
       n[:x] = nx

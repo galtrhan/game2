@@ -1,55 +1,148 @@
 module GameMap
-  # Synchronous full generation (e.g. console load). Prefer map_generation_begin! +
-  # map_generation_step! for large maps to spread work across ticks.
   def generate_map
     map_generation_begin!
-    until map_generation_step!(1 << 28); end
+    generate_initial_chunks
     @tilemap
   end
 
   def map_generation_begin!
-    @outer_door_cells = {}
-    @map_gen_y = 1
-    @map_gen_x = 1
-    @map_gen_struct_id = 0
-    @map_gen_done = false
-
-    srand(@map_seed)
+    @outer_door_cells        = {}
     @tilemap                 = {}
     @structure_map           = {}
     @stair_data              = {}
     @generated_struct_floors = {}
+    @floor_defaults          = {}
+    @tile_mutations          = {}
+    @gen_done                = {}   # [cx, cy] => true  (floor-0 chunks)
+    @gen_queue               = []   # [cx, cy] pairs queued for background gen
+    @gen_queued              = {}   # [cx, cy] => true  (fast membership check)
+    # Deferred floor generation: [struct_id, floor] => {bx, by, bw, bh, return_stairs:[]}
+    @pending_struct_floors   = {}
     init_floor(0, :floor)
   end
 
-  # Places up to `structures_budget` top-level buildings; returns true when finished.
-  def map_generation_step!(structures_budget)
-    return true if @map_gen_done
+  # Generate a structure's non-zero floor on demand (called when player steps onto stair exit).
+  # Idempotent — safe to call multiple times.
+  def generate_struct_floor_if_needed(struct_id, target_floor)
+    return if @generated_struct_floors[[struct_id, target_floor]]
+    pending = @pending_struct_floors[[struct_id, target_floor]]
+    return unless pending
 
-    placed = 0
-    while @map_gen_y < TILES_Y - 1 && placed < structures_budget
-      while @map_gen_x < TILES_X - 1 && placed < structures_budget
-        bw = [10 + rand(9), TILES_X - 1 - @map_gen_x].min
-        bh = [10 + rand(9), TILES_Y - 1 - @map_gen_y].min
-        place_structure(@map_gen_x, @map_gen_y, bw, bh, @map_gen_struct_id, 0, 0)
-        @map_gen_struct_id += 1
-        @map_gen_x += bw + 2 + rand(19)
-        placed += 1
-      end
-      if @map_gen_x >= TILES_X - 1
-        @map_gen_x = 1
-        @map_gen_y += (2 + rand(9)) + 2 + rand(19)
+    # Deterministic seed per struct+floor, independent of chunk RNG sequence.
+    srand(@map_seed ^ (struct_id * 0x9e3779b9 & 0xffffffff) ^ (target_floor * 0x6c62272e & 0xffffffff))
+    place_structure(pending[:bx], pending[:by], pending[:bw], pending[:bh], struct_id, target_floor, 1)
+
+    # Place the explicit return stairs back to the originating floor.
+    pending[:return_stairs].each do |rs|
+      ret_tile = rs[:return_delta] == 1 ? :stair_up : :stair_dn
+      set_tile(target_floor, rs[:tx],     rs[:ty], ret_tile)
+      set_tile(target_floor, rs[:tx] + 1, rs[:ty], ret_tile)
+      stair_base = { struct_id: struct_id,
+                     bx: pending[:bx], by: pending[:by], bw: pending[:bw], bh: pending[:bh] }
+      @stair_data[[target_floor, rs[:tx] + 1, rs[:ty]]] =
+        stair_base.merge(delta: rs[:return_delta], exit_dx: -1, exit_dy: 0, is_exit: false)
+      @stair_data[[target_floor, rs[:tx],      rs[:ty]]] =
+        stair_base.merge(delta: rs[:return_delta], exit_dx: -1, exit_dy: 0, is_exit: true)
+    end
+  end
+
+  # Enqueue any floor-0 chunks within the camera viewport + buffer that haven't
+  # been generated yet.  Called every tick from update_camera.
+  def enqueue_chunks_around_camera
+    return unless @cam_x && @cam_y && @tilemap
+
+    vw  = viewport_w
+    vh  = viewport_h
+    buf = BUFFER_CHUNKS * CHUNK_SIZE * TILE_SIZE
+
+    cx_min = ((@cam_x - buf)      / (CHUNK_SIZE * TILE_SIZE)).floor
+    cx_max = ((@cam_x + vw + buf) / (CHUNK_SIZE * TILE_SIZE)).floor
+    cy_min = ((@cam_y - buf)      / (CHUNK_SIZE * TILE_SIZE)).floor
+    cy_max = ((@cam_y + vh + buf) / (CHUNK_SIZE * TILE_SIZE)).floor
+
+    cy_min.upto(cy_max) do |cy|
+      cx_min.upto(cx_max) do |cx|
+        key = [cx, cy]
+        next if @gen_done[key] || @gen_queued[key]
+        @gen_queue  << key
+        @gen_queued[key] = true
       end
     end
+  end
 
-    if @map_gen_y >= TILES_Y - 1
-      @map_gen_done = true
-      return true
+  # Process up to +budget+ queued chunks; returns true when the queue is empty.
+  def map_generation_step!(budget)
+    budget.times do
+      return true if @gen_queue.empty?
+      key    = @gen_queue.shift
+      cx, cy = key
+      @gen_queued.delete(key)
+      generate_chunk(cx, cy) unless @gen_done[key]
     end
-    false
+    @gen_queue.empty?
   end
 
   private
+
+  def generate_initial_chunks
+    generate_initial_chunks_around(0, 0)
+  end
+
+  def generate_initial_chunks_around(ocx, ocy)
+    r = INITIAL_CHUNK_RADIUS
+    ((ocy - r)..(ocy + r)).each do |cy|
+      ((ocx - r)..(ocx + r)).each do |cx|
+        generate_chunk(cx, cy)
+      end
+    end
+  end
+
+  # Generate one floor-0 chunk — floor 0 only, no recursive upper/lower floors.
+  def generate_chunk(cx, cy)
+    return if @gen_done[[cx, cy]]
+    @gen_done[[cx, cy]] = true
+
+    srand(@map_seed ^ chunk_hash(cx, cy))
+
+    ox = cx * CHUNK_SIZE   # tile-space origin of this chunk
+    oy = cy * CHUNK_SIZE
+
+    base = chunk_struct_base(cx, cy)
+    idx  = 0
+
+    sx = 1
+    while sx < CHUNK_SIZE - 10
+      bw = [10 + rand(9), CHUNK_SIZE - 1 - sx].min
+      break if bw < 10
+
+      sy = 1
+      while sy < CHUNK_SIZE - 10
+        bh = [10 + rand(9), CHUNK_SIZE - 1 - sy].min
+        break if bh < 10
+
+        place_structure(ox + sx, oy + sy, bw, bh, base + idx, 0, 0)
+        idx += 1
+        sy += bh + 2 + rand(19)
+      end
+
+      sx += bw + 2 + rand(19)
+    end
+  end
+
+  # Deterministic hash mixing chunk coords into a seed offset.
+  def chunk_hash(cx, cy)
+    ncx = cx < 0 ? (cx + (1 << 31)) : cx
+    ncy = cy < 0 ? (cy + (1 << 31)) : cy
+    ((ncx * 0x9e3779b9) ^ (ncy * 0x6c62272e)) & 0xffffffff
+  end
+
+  # Bijection (Z, Z) → N that assigns 100 unique struct-id slots per chunk.
+  def chunk_struct_base(cx, cy)
+    ecx = cx >= 0 ? cx * 2 : (-cx * 2 - 1)
+    ecy = cy >= 0 ? cy * 2 : (-cy * 2 - 1)
+    n   = ecx + ecy
+    (n * (n + 1) / 2 + ecy) * 100
+  end
 
   def mark_outer_door_if_needed(floor, tx, ty, sx, sy, bw, bh)
     return unless tx == sx || tx == sx + bw - 1 || ty == sy || ty == sy + bh - 1
@@ -57,9 +150,10 @@ module GameMap
     @outer_door_cells[[floor, tx, ty]] = true
   end
 
-  def init_floor(floor, default_tile)
-    @tilemap[floor]       = Array.new(TILES_Y) { Array.new(TILES_X, default_tile) }
-    @structure_map[floor] = Array.new(TILES_Y) { Array.new(TILES_X, nil) }
+  def init_floor(floor, default_tile = :floor)
+    @floor_defaults[floor] = default_tile
+    @tilemap[floor]       ||= {}
+    @structure_map[floor] ||= {}
   end
 
   def place_structure(x, y, bw, bh, struct_id, floor, depth)
@@ -68,14 +162,12 @@ module GameMap
 
     init_floor(floor, :block) unless @tilemap[floor]
 
-    map  = @tilemap[floor]
-    smap = @structure_map[floor]
-
-    bw.times { |dx| bh.times { |dy| smap[y + dy][x + dx] = struct_id } }
+    bw.times { |dx| bh.times { |dy| set_smap(floor, x + dx, y + dy, struct_id) } }
 
     bw.times do |dx|
       bh.times do |dy|
-        map[y + dy][x + dx] = (dx == 0 || dx == bw - 1 || dy == 0 || dy == bh - 1) ? :block : :floor
+        set_tile(floor, x + dx, y + dy,
+                 (dx == 0 || dx == bw - 1 || dy == 0 || dy == bh - 1) ? :block : :floor)
       end
     end
 
@@ -93,8 +185,8 @@ module GameMap
       ry += 3 + rand(3)
     end
 
-    col_dividers.each { |dx| (1..bh - 2).each { |dy| map[y + dy][x + dx] = :block } }
-    row_dividers.each { |dy| (1..bw - 2).each { |dx| map[y + dy][x + dx] = :block } }
+    col_dividers.each { |dx| (1..bh - 2).each { |dy| set_tile(floor, x + dx, y + dy, :block) } }
+    row_dividers.each { |dy| (1..bw - 2).each { |dx| set_tile(floor, x + dx, y + dy, :block) } }
 
     row_bands = band_ranges(bh, row_dividers)
     col_bands = band_ranges(bw, col_dividers)
@@ -104,7 +196,7 @@ module GameMap
         door_dy = band.to_a[rand(band.size)]
         ty = y + door_dy
         tx = x + dx
-        map[ty][tx] = rand(2) == 0 ? :locked_door : :door
+        set_tile(floor, tx, ty, rand(2) == 0 ? :locked_door : :door)
         mark_outer_door_if_needed(floor, tx, ty, x, y, bw, bh)
       end
     end
@@ -114,7 +206,7 @@ module GameMap
         door_dx = band.to_a[rand(band.size)]
         ty = y + dy
         tx = x + door_dx
-        map[ty][tx] = rand(2) == 0 ? :locked_door : :door
+        set_tile(floor, tx, ty, rand(2) == 0 ? :locked_door : :door)
         mark_outer_door_if_needed(floor, tx, ty, x, y, bw, bh)
       end
     end
@@ -130,7 +222,7 @@ module GameMap
       end
       dt = border[rand(border.length)]
       if dt
-        map[dt[1]][dt[0]] = :door
+        set_tile(floor, dt[0], dt[1], :door)
         mark_outer_door_if_needed(floor, dt[0], dt[1], x, y, bw, bh)
       end
     end
@@ -151,7 +243,6 @@ module GameMap
   end
 
   def place_single_stair(x, y, bw, bh, struct_id, floor, col_dividers, row_dividers, delta)
-    map = @tilemap[floor]
     20.times do
       tx = x + 2 + rand(bw - 5)
       ty = y + 2 + rand(bh - 4)
@@ -160,24 +251,21 @@ module GameMap
       next if col_dividers.include?(lx) || col_dividers.include?(lx + 1)
       next if row_dividers.include?(ly)
       next if tx + 1 >= x + bw - 1
-      next if map[ty][tx] != :floor || map[ty][tx + 1] != :floor
+      next if get_tile_raw(floor, tx, ty) != :floor || get_tile_raw(floor, tx + 1, ty) != :floor
 
       tile = delta == 1 ? :stair_up : :stair_dn
-      map[ty][tx]     = tile
-      map[ty][tx + 1] = tile
+      set_tile(floor, tx,     ty, tile)
+      set_tile(floor, tx + 1, ty, tile)
 
-      @stair_data[[floor, tx,     ty]] = { delta: delta, exit_dx: 1, exit_dy: 0, is_exit: false }
-      @stair_data[[floor, tx + 1, ty]] = { delta: delta, exit_dx: 1, exit_dy: 0, is_exit: true  }
+      stair_base = { struct_id: struct_id, bx: x, by: y, bw: bw, bh: bh }
+      @stair_data[[floor, tx,     ty]] = stair_base.merge(delta: delta, exit_dx: 1, exit_dy: 0, is_exit: false)
+      @stair_data[[floor, tx + 1, ty]] = stair_base.merge(delta: delta, exit_dx: 1, exit_dy: 0, is_exit: true)
 
+      # Record the adjacent floor as pending — generated on demand when player enters.
       next_floor = floor + delta
-      place_structure(x, y, bw, bh, struct_id, next_floor, 1)
-
-      nmap     = @tilemap[next_floor]
-      ret_tile = delta == 1 ? :stair_dn : :stair_up
-      nmap[ty][tx]     = ret_tile
-      nmap[ty][tx + 1] = ret_tile
-      @stair_data[[next_floor, tx + 1, ty]] = { delta: -delta, exit_dx: -1, exit_dy: 0, is_exit: false }
-      @stair_data[[next_floor, tx,     ty]] = { delta: -delta, exit_dx: -1, exit_dy: 0, is_exit: true  }
+      rec = (@pending_struct_floors[[struct_id, next_floor]] ||=
+               { bx: x, by: y, bw: bw, bh: bh, return_stairs: [] })
+      rec[:return_stairs] << { tx: tx, ty: ty, return_delta: -delta }
 
       return
     end

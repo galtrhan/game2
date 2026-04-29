@@ -1,4 +1,54 @@
 module GameMap
+  # ---------------------------------------------------------------------------
+  # Chunk-flat-array storage helpers
+  #
+  # @tilemap[floor]        = Hash<int_chunk_key, Array<CHUNK_SIZE²>>
+  # @structure_map[floor]  = Hash<int_chunk_key, Array<CHUNK_SIZE²>>
+  #
+  # chunk_key = cx * CHUNK_STRIDE + cy  (integer — no heap allocation)
+  # tile_idx  = dy * CHUNK_SIZE + dx
+  #
+  # nil in the chunk array means "use floor default" (floor_defaults[floor]).
+  # ---------------------------------------------------------------------------
+
+  def set_tile(floor, tx, ty, val)
+    cx = tx.div(CHUNK_SIZE)
+    cy = ty.div(CHUNK_SIZE)
+    chunk = ((@tilemap[floor] ||= {})[cx * CHUNK_STRIDE + cy] ||= Array.new(CHUNK_SIZE * CHUNK_SIZE))
+    chunk[(ty - cy * CHUNK_SIZE) * CHUNK_SIZE + (tx - cx * CHUNK_SIZE)] = val
+  end
+
+  def set_smap(floor, tx, ty, val)
+    cx = tx.div(CHUNK_SIZE)
+    cy = ty.div(CHUNK_SIZE)
+    chunk = ((@structure_map[floor] ||= {})[cx * CHUNK_STRIDE + cy] ||= Array.new(CHUNK_SIZE * CHUNK_SIZE))
+    chunk[(ty - cy * CHUNK_SIZE) * CHUNK_SIZE + (tx - cx * CHUNK_SIZE)] = val
+  end
+
+  # Raw tile value from chunk array — nil if unset (caller applies default).
+  def get_tile_raw(floor, tx, ty)
+    fmap = @tilemap[floor]
+    return nil unless fmap
+    cx = tx.div(CHUNK_SIZE)
+    cy = ty.div(CHUNK_SIZE)
+    chunk = fmap[cx * CHUNK_STRIDE + cy]
+    return nil unless chunk
+    chunk[(ty - cy * CHUNK_SIZE) * CHUNK_SIZE + (tx - cx * CHUNK_SIZE)]
+  end
+
+  # Public API — returns the effective tile symbol, applying the floor default.
+  def map_tile(tx, ty, floor = nil)
+    floor ||= @player ? @player[:floor] : 0
+    default = @floor_defaults ? (@floor_defaults[floor] || :floor) : :floor
+    fmap = @tilemap[floor]
+    return default unless fmap
+    cx = tx.div(CHUNK_SIZE)
+    cy = ty.div(CHUNK_SIZE)
+    chunk = fmap[cx * CHUNK_STRIDE + cy]
+    return default unless chunk
+    chunk[(ty - cy * CHUNK_SIZE) * CHUNK_SIZE + (tx - cx * CHUNK_SIZE)] || default
+  end
+
   # True when the player (or vehicle center on floor 0) stands on a structure-owned tile.
   def player_in_interior?
     return false unless @structure_map && @player
@@ -13,37 +63,23 @@ module GameMap
         [@player[:tx], @player[:ty]]
       end
 
-    return false if tx < 0 || tx >= TILES_X || ty < 0 || ty >= TILES_Y
-
     smap = @structure_map[fl]
     return false unless smap
-
-    row = smap[ty]
-    row && !row[tx].nil?
-  end
-
-  def map_tile(tx, ty, floor = nil)
-    floor ||= @player ? @player[:floor] : 0
-    return :block if tx < 0 || tx >= TILES_X || ty < 0 || ty >= TILES_Y
-    f = @tilemap[floor]
-    return :block unless f
-    f[ty][tx]
+    cx = tx.div(CHUNK_SIZE)
+    cy = ty.div(CHUNK_SIZE)
+    chunk = smap[cx * CHUNK_STRIDE + cy]
+    return false unless chunk
+    !chunk[(ty - cy * CHUNK_SIZE) * CHUNK_SIZE + (tx - cx * CHUNK_SIZE)].nil?
   end
 
   def find_spawn
+    half = CHUNK_SIZE * INITIAL_CHUNK_RADIUS   # spawn inside positive initial area
     FIND_SPAWN_RANDOM_TRIES.times do
-      tx = rand(TILES_X)
-      ty = rand(TILES_Y)
+      tx = rand(half)
+      ty = rand(half)
       return { tx: tx, ty: ty } if map_tile(tx, ty, 0) == :floor
     end
-
-    # Rare fallback: sparse floor — scan without allocating a huge array.
-    TILES_Y.times do |ty|
-      TILES_X.times do |tx|
-        return { tx: tx, ty: ty } if map_tile(tx, ty, 0) == :floor
-      end
-    end
-    { tx: 0, ty: 0 }
+    { tx: 1, ty: 1 }
   end
 
   def spawn_vehicle(player_tx, player_ty)

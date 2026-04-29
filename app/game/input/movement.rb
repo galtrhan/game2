@@ -16,7 +16,9 @@ module GameInput
     return false unless data && data[:is_exit]
     return false unless dx == data[:exit_dx] && dy == data[:exit_dy]
     new_floor = @player[:floor] + data[:delta]
-    return false unless @tilemap && @tilemap[new_floor]
+    # Generate the target floor now if it hasn't been yet.
+    generate_struct_floor_if_needed(data[:struct_id], new_floor) if data[:struct_id]
+    return false unless @tilemap[new_floor]
     @player[:floor] = new_floor
     true
   end

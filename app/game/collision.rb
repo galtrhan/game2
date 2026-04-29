@@ -14,10 +14,10 @@ module GameCollision
     cy = y + PLAYER_H * 0.5
     r  = PLAYER_RADIUS
 
-    tx_lo = ((cx - r) / TILE_SIZE).floor.clamp(0, TILES_X - 1)
-    tx_hi = ((cx + r) / TILE_SIZE).ceil.clamp(0, TILES_X - 1)
-    ty_lo = ((cy - r) / TILE_SIZE).floor.clamp(0, TILES_Y - 1)
-    ty_hi = ((cy + r) / TILE_SIZE).ceil.clamp(0, TILES_Y - 1)
+    tx_lo = ((cx - r) / TILE_SIZE).floor
+    tx_hi = ((cx + r) / TILE_SIZE).ceil
+    ty_lo = ((cy - r) / TILE_SIZE).floor
+    ty_hi = ((cy + r) / TILE_SIZE).ceil
 
     ty_lo.upto(ty_hi) do |ty|
       tx_lo.upto(tx_hi) do |tx|
@@ -49,10 +49,10 @@ module GameCollision
     cy = y + PLAYER_H * 0.5
     r  = PLAYER_RADIUS
 
-    tx_lo = ((cx - r) / TILE_SIZE).floor.clamp(0, TILES_X - 1)
-    tx_hi = ((cx + r) / TILE_SIZE).ceil.clamp(0, TILES_X - 1)
-    ty_lo = ((cy - r) / TILE_SIZE).floor.clamp(0, TILES_Y - 1)
-    ty_hi = ((cy + r) / TILE_SIZE).ceil.clamp(0, TILES_Y - 1)
+    tx_lo = ((cx - r) / TILE_SIZE).floor
+    tx_hi = ((cx + r) / TILE_SIZE).ceil
+    ty_lo = ((cy - r) / TILE_SIZE).floor
+    ty_hi = ((cy + r) / TILE_SIZE).ceil
 
     ty_lo.upto(ty_hi) do |ty|
       tx_lo.upto(tx_hi) do |tx|

@@ -1,14 +1,17 @@
 module GameConstants
   UI_FONT = 'fonts/Kenney Mini Square.ttf'.freeze
 
-  # Shown while the map streams in across ticks (see MAP_GEN_STRUCTURES_PER_TICK).
+  # Shown on the one-tick loading screen before the initial chunks are placed.
   NEW_GAME_LOADING_DETAIL = 'Placing buildings, floors, doors, and stairs...'.freeze
 
   TILE_SIZE      = 32
-  TILES_X        = 100
-  TILES_Y        = 100
-  MAP_PX         = TILES_X * TILE_SIZE
-  MAP_PY         = TILES_Y * TILE_SIZE
+  # Infinite world: tiles generated in CHUNK_SIZE×CHUNK_SIZE blocks on demand.
+  # 64 tiles lets 2-3 buildings fit per row/column per chunk, matching original density.
+  CHUNK_SIZE     = 64
+  # Integer stride for encoding (cx, cy) into a single hash key (no array allocation).
+  CHUNK_STRIDE   = 10_000
+  # Chunks of buffer beyond the visible viewport to keep generated.
+  BUFFER_CHUNKS  = 3
   SCREEN_W       = 1280
   SCREEN_H       = 720
   # World→screen scale; default 2x (see @zoom in GameCamera). Min 1x only while driving (after delay).
@@ -31,7 +34,7 @@ module GameConstants
   PLAYER_SPEED   = 3
   VEHICLE_W      = TILE_SIZE
   VEHICLE_H      = TILE_SIZE * 2
-  VEHICLE_SPEED  = 10
+  VEHICLE_SPEED  = 6
   INTERACT_DIST  = TILE_SIZE * 2
 
   # Simple red-triangle NPCs (same circle body as player).
@@ -70,8 +73,11 @@ module GameConstants
   MAX_STRUCT_FLOOR =  100  # highest floor generated per structure
   MIN_STRUCT_FLOOR = -40   # lowest floor generated per structure
 
-  # Top-level structures placed per tick while generating (larger maps need >1 to stay responsive).
-  MAP_GEN_STRUCTURES_PER_TICK = 12
+  # Chunks processed per tick during background generation.
+  # 1 keeps frame time predictable; increase if generation falls behind at high speed.
+  MAP_GEN_CHUNKS_PER_TICK = 1
+  # Half-side of the square of chunks generated synchronously at game start.
+  INITIAL_CHUNK_RADIUS = 2   # 5×5 chunks = 160×160 tiles at CHUNK_SIZE=32
 
   # Random tries before scanning for a floor tile (avoid building a million-entry spawn list).
   FIND_SPAWN_RANDOM_TRIES = 800

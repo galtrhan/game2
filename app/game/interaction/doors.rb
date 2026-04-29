@@ -27,13 +27,12 @@ module GameInteraction
 
   def toggle_door_at(tx, ty)
     fl = @player[:floor]
-    floor_map = @tilemap[fl]
-    return unless floor_map && floor_map[ty]
-
-    t = floor_map[ty][tx]
+    t  = get_tile_raw(fl, tx, ty)
     return unless t == :door || t == :locked_door
 
-    floor_map[ty][tx] = t == :door ? :locked_door : :door
+    new_tile = t == :door ? :locked_door : :door
+    set_tile(fl, tx, ty, new_tile)
+    (@tile_mutations ||= {})[[fl, tx, ty]] = new_tile
   end
 
   private
