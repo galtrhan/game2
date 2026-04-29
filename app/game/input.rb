@@ -1,6 +1,11 @@
 module GameInput
   include GameConstants
+end
 
+require 'app/game/input/movement'
+require 'app/game/input/pause'
+
+module GameInput
   def input
     return if scene_manager.transitioning?
 
@@ -19,7 +24,13 @@ module GameInput
     end
 
     if kb.key_down.e
-      @mode == :in_vehicle ? exit_vehicle : (enter_vehicle if near_vehicle?)
+      if @mode == :in_vehicle
+        exit_vehicle
+      elsif near_vehicle?
+        enter_vehicle
+      elsif (tgt = door_interact_target)
+        toggle_door_at(tgt[0], tgt[1])
+      end
     end
 
     dx = 0
@@ -75,58 +86,5 @@ module GameInput
         @vehicle[:y] = ny unless blocked_rect?(@vehicle[:x], ny, VEHICLE_W, VEHICLE_H, 0)
       end
     end
-  end
-
-  def input_pause(kb)
-    if kb.key_down.w || kb.key_down.up
-      @pause_selected = (@pause_selected - 1) % PAUSE_ITEMS.length
-    end
-    if kb.key_down.s || kb.key_down.down
-      @pause_selected = (@pause_selected + 1) % PAUSE_ITEMS.length
-    end
-    if kb.key_down.space || kb.key_down.enter || kb.key_down.e
-      pause_accept
-    end
-  end
-
-  def pause_accept
-    case @pause_selected
-    when 0
-      @paused = false
-    when 1
-      save_game
-      @paused = false
-    when 2
-      data = $gtk.read_file(SAVE_PATH)
-      load_from_data(data) if data
-      @paused = false
-    when 3
-      @paused = false
-      scene_manager.transition_to(:menu, fade_r: 255, fade_g: 255, fade_b: 255)
-    end
-  end
-
-  private
-
-  # Returns true and changes floor if player is on a stair exit tile moving in exit direction.
-  def try_stair_transition(dx, dy)
-    return false unless @stair_data
-    data = @stair_data[[@player[:floor], @player[:tx], @player[:ty]]]
-    return false unless data && data[:is_exit]
-    return false unless dx == data[:exit_dx] && dy == data[:exit_dy]
-    new_floor = @player[:floor] + data[:delta]
-    return false unless @tilemap && @tilemap[new_floor]
-    @player[:floor] = new_floor
-    true
-  end
-
-  # Returns true if target tile is a stair exit that can't be entered from current position.
-  def stair_exit_blocked?(ntx, nty, dx, dy)
-    return false unless @stair_data
-    data = @stair_data[[@player[:floor], ntx, nty]]
-    return false unless data && data[:is_exit]
-    entry_tx = ntx - data[:exit_dx]
-    entry_ty = nty - data[:exit_dy]
-    @player[:tx] != entry_tx || @player[:ty] != entry_ty
   end
 end

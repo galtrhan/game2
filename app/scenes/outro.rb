@@ -1,4 +1,6 @@
 class OutroScene
+  include GameConstants
+
   attr_accessor :args, :scene_manager
 
   DISPLAY_FRAMES = 180 # 3 seconds at 60fps
@@ -30,6 +32,7 @@ class OutroScene
       x: 640,
       y: 360,
       text: 'Bye Bye',
+      font: UI_FONT,
       size_px: 48,
       anchor_x: 0.5,
       anchor_y: 0.5,

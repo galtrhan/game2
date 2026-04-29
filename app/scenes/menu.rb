@@ -1,4 +1,6 @@
 class MenuScene
+  include GameConstants
+
   attr_accessor :args, :scene_manager
 
   SAVE_PATH = 'saves/game2.sav'
@@ -11,9 +13,9 @@ class MenuScene
 
   def defaults
     @buttons ||= [
-      { label: 'Start Game', action: :game },
-      { label: 'Load',       action: :load },
-      { label: 'Quit',       action: :outro }
+      { label: 'Start', action: :game },
+      { label: 'Load',  action: :load },
+      { label: 'Quit',  action: :outro }
     ]
     @selected ||= 0
   end
@@ -63,8 +65,9 @@ class MenuScene
       end
 
       args.outputs.labels << {
-        x: 640, y: y + 20,
+        x: 640, y: y + 8,
         text: btn[:label],
+        font: UI_FONT,
         size_px: 28, anchor_x: 0.5, anchor_y: 0.5,
         r: active ? 255 : 60,
         g: active ? 255 : 60,

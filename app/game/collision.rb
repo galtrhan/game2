@@ -15,7 +15,22 @@ module GameCollision
       [x + w - 1 - r, y + r        ],
       [x + r,         y + h - 1 - r],
       [x + w - 1 - r, y + h - 1 - r]
-    ].any? { |cx, cy| t = map_tile((cx / TILE_SIZE).to_i, (cy / TILE_SIZE).to_i, floor); t == :block || t == :locked_door }
+    ].any? do |cx, cy|
+      ctx = (cx / TILE_SIZE).to_i
+      cty = (cy / TILE_SIZE).to_i
+      t = map_tile(ctx, cty, floor)
+      case t
+      when :block
+        true
+      when :locked_door
+        # Standing on a door then locking it traps the hitbox on locked_door; allow leaving that tile only.
+        next false if @mode == :on_foot && @player && ctx == @player[:tx] && cty == @player[:ty]
+
+        true
+      else
+        false
+      end
+    end
     return true if tile_hit
 
     if @mode == :on_foot && @vehicle && @vehicle[:collidable]

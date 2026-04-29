@@ -22,14 +22,24 @@ module GameSaveLoad
   end
 
   def load_from_data(raw)
-    pairs = {}
-    raw.split('|').each { |p| k, v = p.split('='); pairs[k] = v }
-
+    pairs = parse_save_pairs(raw)
     @map_seed = pairs['seed'].to_i
     # generate_map restores @structure_map and @stair_data from seed
     generate_map
+    apply_loaded_save_after_map!(pairs)
+  end
+
+  def parse_save_pairs(raw)
+    pairs = {}
+    raw.split('|').each { |p| k, v = p.split('='); pairs[k] = v }
+    pairs
+  end
+
+  # Call after generate_map has rebuilt @tilemap from the seed (sync path).
+  def apply_loaded_save_after_map!(pairs)
     map_json = $gtk.read_file(MAP_SAVE_PATH)
     @tilemap = json_to_tilemap(map_json) if map_json
+    rebuild_outer_door_cells
 
     @player = { x: pairs['player_x'].to_i, y: pairs['player_y'].to_i, tx: 0, ty: 0,
                 facing: :idle, idle_timer: 0, floor: (pairs['player_floor'] || '0').to_i }

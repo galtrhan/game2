@@ -1,6 +1,6 @@
+require 'app/game/constants'
 require 'app/scenes/menu'
 require 'app/scenes/outro'
-require 'app/game/constants'
 require 'app/game/map'
 require 'app/game/save_load'
 require 'app/game/collision'

@@ -1,4 +1,9 @@
 module GameConstants
+  UI_FONT = 'fonts/Kenney Mini Square.ttf'.freeze
+
+  # Shown on the one-frame "Generating world..." screen (generation runs synchronously next tick).
+  NEW_GAME_LOADING_DETAIL = 'Placing buildings, floors, doors, and stairs...'.freeze
+
   TILE_SIZE      = 32
   TILES_X        = 100
   TILES_Y        = 70
@@ -11,7 +16,7 @@ module GameConstants
   PLAYER_SPEED   = 3
   VEHICLE_W      = TILE_SIZE
   VEHICLE_H      = TILE_SIZE * 2
-  VEHICLE_SPEED  = 2
+  VEHICLE_SPEED  = 10
   INTERACT_DIST  = TILE_SIZE * 2
   SAVE_PATH      = 'saves/game2.sav'
   MAP_SAVE_PATH  = 'saves/game2_map.json'
@@ -20,8 +25,8 @@ module GameConstants
 
   PAUSE_ITEMS = ['Continue', 'Save', 'Load', 'Quit'].freeze
 
-  MAX_STRUCT_FLOOR =  3   # highest floor generated per structure
-  MIN_STRUCT_FLOOR = -2   # lowest floor generated per structure
+  MAX_STRUCT_FLOOR =  100  # highest floor generated per structure
+  MIN_STRUCT_FLOOR = -40   # lowest floor generated per structure
 
   DZ_W      = (SCREEN_W * 0.5).to_i
   DZ_H      = (SCREEN_H * 0.5).to_i
