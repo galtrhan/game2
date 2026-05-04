@@ -18,6 +18,7 @@ module GameMap
     @gen_queued              = {}   # [cx, cy] => true  (fast membership check)
     # Deferred floor generation: [struct_id, floor] => {bx, by, bw, bh, return_stairs:[]}
     @pending_struct_floors   = {}
+    @struct_bounds           = {}   # struct_id => { x:, y:, bw:, bh: } (floor-0 footprint)
     init_floor(0, :floor)
   end
 
@@ -30,11 +31,18 @@ module GameMap
 
     # Deterministic seed per struct+floor, independent of chunk RNG sequence.
     srand(@map_seed ^ (struct_id * 0x9e3779b9 & 0xffffffff) ^ (target_floor * 0x6c62272e & 0xffffffff))
-    place_structure(pending[:bx], pending[:by], pending[:bw], pending[:bh], struct_id, target_floor, 1)
+    # Suppress native stairs in directions already covered by inbound return
+    # stairs from the originating floor — avoids duplicate stairs on this floor.
+    skip_deltas = pending[:return_stairs].map { |rs| rs[:return_delta] }.uniq
+    place_structure(pending[:bx], pending[:by], pending[:bw], pending[:bh], struct_id, target_floor, 1, skip_deltas)
 
     # Place the explicit return stairs back to the originating floor.
+    # Return stairs are forced to the originating floor's coordinates (vertical
+    # alignment between floors), so clear any doors the regenerated layout may
+    # have placed adjacent to them — keeps the "stairs never touch doors" rule.
     pending[:return_stairs].each do |rs|
       ret_tile = rs[:return_delta] == 1 ? :stair_up : :stair_dn
+      clear_doors_around_return_stair!(target_floor, rs[:tx], rs[:ty])
       set_tile(target_floor, rs[:tx],     rs[:ty], ret_tile)
       set_tile(target_floor, rs[:tx] + 1, rs[:ty], ret_tile)
       stair_base = { struct_id: struct_id,
@@ -44,6 +52,8 @@ module GameMap
       @stair_data[[target_floor, rs[:tx],      rs[:ty]]] =
         stair_base.merge(delta: rs[:return_delta], exit_dx: -1, exit_dy: 0, is_exit: true)
     end
+
+    spawn_npcs_for_new_floor(struct_id, target_floor) if respond_to?(:spawn_npcs_for_new_floor)
   end
 
   # Enqueue any floor-0 chunks within the camera viewport + buffer that haven't
@@ -156,10 +166,11 @@ module GameMap
     @structure_map[floor] ||= {}
   end
 
-  def place_structure(x, y, bw, bh, struct_id, floor, depth)
+  def place_structure(x, y, bw, bh, struct_id, floor, depth, skip_stair_deltas = [])
     return if @generated_struct_floors[[struct_id, floor]]
     @generated_struct_floors[[struct_id, floor]] = true
 
+    @struct_bounds[struct_id] ||= { x: x, y: y, bw: bw, bh: bh }
     init_floor(floor, :block) unless @tilemap[floor]
 
     bw.times { |dx| bh.times { |dy| set_smap(floor, x + dx, y + dy, struct_id) } }
@@ -217,57 +228,129 @@ module GameMap
         bw.times do |dx|
           next unless dx == 0 || dx == bw - 1 || dy == 0 || dy == bh - 1
           next if (dx == 0 || dx == bw - 1) && (dy == 0 || dy == bh - 1)
+
+          # The tile the player steps onto from the door must be walkable —
+          # if it's a perpendicular divider wall, the door is unusable.
+          idx = dx == 0 ? 1 : (dx == bw - 1 ? bw - 2 : dx)
+          idy = dy == 0 ? 1 : (dy == bh - 1 ? bh - 2 : dy)
+          next unless get_tile_raw(floor, x + idx, y + idy) == :floor
+
           border << [x + dx, y + dy]
         end
       end
-      dt = border[rand(border.length)]
+      dt = border[rand(border.length)] unless border.empty?
       if dt
         set_tile(floor, dt[0], dt[1], :door)
         mark_outer_door_if_needed(floor, dt[0], dt[1], x, y, bw, bh)
       end
     end
 
-    place_stairs(x, y, bw, bh, struct_id, floor, col_dividers, row_dividers)
+    place_stairs(x, y, bw, bh, struct_id, floor, col_dividers, row_dividers, skip_stair_deltas)
   end
 
-  def place_stairs(x, y, bw, bh, struct_id, floor, col_dividers, row_dividers)
+  def place_stairs(x, y, bw, bh, struct_id, floor, col_dividers, row_dividers, skip_deltas = [])
     return unless bw >= 6 && bh >= 5
 
-    if floor < MAX_STRUCT_FLOOR
-      2.times { place_single_stair(x, y, bw, bh, struct_id, floor, col_dividers, row_dividers, 1) }
+    if floor < MAX_STRUCT_FLOOR && !skip_deltas.include?(1)
+      place_single_stair(x, y, bw, bh, struct_id, floor, col_dividers, row_dividers, 1)
     end
 
-    if floor > MIN_STRUCT_FLOOR
+    if floor > MIN_STRUCT_FLOOR && !skip_deltas.include?(-1)
       place_single_stair(x, y, bw, bh, struct_id, floor, col_dividers, row_dividers, -1)
     end
   end
 
   def place_single_stair(x, y, bw, bh, struct_id, floor, col_dividers, row_dividers, delta)
-    20.times do
-      tx = x + 2 + rand(bw - 5)
-      ty = y + 2 + rand(bh - 4)
-      lx = tx - x
-      ly = ty - y
-      next if col_dividers.include?(lx) || col_dividers.include?(lx + 1)
-      next if row_dividers.include?(ly)
-      next if tx + 1 >= x + bw - 1
-      next if get_tile_raw(floor, tx, ty) != :floor || get_tile_raw(floor, tx + 1, ty) != :floor
+    candidates = stair_corner_candidates(x, y, bw, bh, floor, col_dividers, row_dividers)
+    candidates.shuffle!
 
-      tile = delta == 1 ? :stair_up : :stair_dn
-      set_tile(floor, tx,     ty, tile)
-      set_tile(floor, tx + 1, ty, tile)
+    safe = candidates.find { |tx, ty| stair_safe_from_doors?(floor, tx, ty) }
+    chosen = safe || candidates.first
+    return unless chosen
 
-      stair_base = { struct_id: struct_id, bx: x, by: y, bw: bw, bh: bh }
-      @stair_data[[floor, tx,     ty]] = stair_base.merge(delta: delta, exit_dx: 1, exit_dy: 0, is_exit: false)
-      @stair_data[[floor, tx + 1, ty]] = stair_base.merge(delta: delta, exit_dx: 1, exit_dy: 0, is_exit: true)
+    tx, ty = chosen
+    clear_doors_around_stair!(floor, tx, ty) unless safe
 
-      # Record the adjacent floor as pending — generated on demand when player enters.
-      next_floor = floor + delta
-      rec = (@pending_struct_floors[[struct_id, next_floor]] ||=
-               { bx: x, by: y, bw: bw, bh: bh, return_stairs: [] })
-      rec[:return_stairs] << { tx: tx, ty: ty, return_delta: -delta }
+    tile = delta == 1 ? :stair_up : :stair_dn
+    set_tile(floor, tx,     ty, tile)
+    set_tile(floor, tx + 1, ty, tile)
 
-      return
+    stair_base = { struct_id: struct_id, bx: x, by: y, bw: bw, bh: bh }
+    @stair_data[[floor, tx,     ty]] = stair_base.merge(delta: delta, exit_dx: 1, exit_dy: 0, is_exit: false)
+    @stair_data[[floor, tx + 1, ty]] = stair_base.merge(delta: delta, exit_dx: 1, exit_dy: 0, is_exit: true)
+
+    # Record the adjacent floor as pending — generated on demand when player enters.
+    next_floor = floor + delta
+    rec = (@pending_struct_floors[[struct_id, next_floor]] ||=
+             { bx: x, by: y, bw: bw, bh: bh, return_stairs: [] })
+    rec[:return_stairs] << { tx: tx, ty: ty, return_delta: -delta }
+  end
+
+  # Corners are west-anchored (so the east-facing exit opens into the sub-room),
+  # touching either the north or south wall of a sub-room.
+  def stair_corner_candidates(x, y, bw, bh, floor, col_dividers, row_dividers)
+    col_bands = band_ranges(bw, col_dividers)
+    row_bands = band_ranges(bh, row_dividers)
+    out = []
+    col_bands.each do |cb|
+      next if cb.size < 3 # need 2 stair tiles + 1 exit tile to the east
+      tx = x + cb.first
+      row_bands.each do |rb|
+        [rb.first, rb.last].uniq.each do |ly|
+          ty = y + ly
+          next unless valid_stair_corner?(floor, tx, ty)
+          out << [tx, ty]
+        end
+      end
+    end
+    out
+  end
+
+  def valid_stair_corner?(floor, tx, ty)
+    return false unless get_tile_raw(floor, tx,     ty) == :floor
+    return false unless get_tile_raw(floor, tx + 1, ty) == :floor
+    return false unless get_tile_raw(floor, tx + 2, ty) == :floor
+
+    north_wall = stair_wall?(floor, tx, ty - 1) && stair_wall?(floor, tx + 1, ty - 1)
+    south_wall = stair_wall?(floor, tx, ty + 1) && stair_wall?(floor, tx + 1, ty + 1)
+    north_wall || south_wall
+  end
+
+  def stair_wall?(floor, tx, ty)
+    t = get_tile_raw(floor, tx, ty)
+    t == :block || t.nil?
+  end
+
+  # 3-row × 5-col footprint covers the stair pair, the exit tile, and every neighbor.
+  def stair_safe_from_doors?(floor, tx, ty)
+    (tx - 1).upto(tx + 3) do |sx|
+      (ty - 1).upto(ty + 1) do |sy|
+        t = get_tile_raw(floor, sx, sy)
+        return false if t == :door || t == :locked_door
+      end
+    end
+    true
+  end
+
+  # Fallback when every corner has a door nearby — overwrite the door with floor
+  # so the room stays connected but the stair no longer touches it.
+  def clear_doors_around_stair!(floor, tx, ty)
+    (tx - 1).upto(tx + 3) do |sx|
+      (ty - 1).upto(ty + 1) do |sy|
+        t = get_tile_raw(floor, sx, sy)
+        set_tile(floor, sx, sy, :floor) if t == :door || t == :locked_door
+      end
+    end
+  end
+
+  # Return stairs exit west; the regenerated floor's doors may sit on either side,
+  # so clear the full 5×3 region around the stair pair.
+  def clear_doors_around_return_stair!(floor, tx, ty)
+    (tx - 2).upto(tx + 2) do |sx|
+      (ty - 1).upto(ty + 1) do |sy|
+        t = get_tile_raw(floor, sx, sy)
+        set_tile(floor, sx, sy, :floor) if t == :door || t == :locked_door
+      end
     end
   end
 

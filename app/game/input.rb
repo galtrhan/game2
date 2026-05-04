@@ -56,20 +56,42 @@ module GameInput
         nx  = @player[:x] + dx * PLAYER_SPEED
         ntx = (nx + (PLAYER_W * 0.5).to_i).div(TILE_SIZE)
         nty = @player[:ty]
-        if !try_stair_transition(dx, 0) &&
-           !stair_exit_blocked?(ntx, nty, dx, 0) &&
-           !blocked_player_circle?(nx, @player[:y])
-          @player[:x] = nx
+        unless try_stair_transition(dx, 0) || stair_exit_blocked?(ntx, nty, dx, 0)
+          if !blocked_player_circle?(nx, @player[:y])
+            @player[:x] = nx
+          else
+            # Corner slide: nudge Y slightly to slip through door gaps and around corners.
+            nudge = -PLAYER_SPEED
+            while nudge <= PLAYER_SPEED
+              if nudge != 0 && !blocked_player_circle?(nx, @player[:y] + nudge)
+                @player[:x] = nx
+                @player[:y] += nudge
+                break
+              end
+              nudge += 1
+            end
+          end
         end
       end
       if dy != 0
         ny  = @player[:y] + dy * PLAYER_SPEED
         ntx = @player[:tx]
         nty = (ny + (PLAYER_H * 0.5).to_i).div(TILE_SIZE)
-        if !try_stair_transition(0, dy) &&
-           !stair_exit_blocked?(ntx, nty, 0, dy) &&
-           !blocked_player_circle?(@player[:x], ny)
-          @player[:y] = ny
+        unless try_stair_transition(0, dy) || stair_exit_blocked?(ntx, nty, 0, dy)
+          if !blocked_player_circle?(@player[:x], ny)
+            @player[:y] = ny
+          else
+            # Corner slide: nudge X slightly to slip through door gaps and around corners.
+            nudge = -PLAYER_SPEED
+            while nudge <= PLAYER_SPEED
+              if nudge != 0 && !blocked_player_circle?(@player[:x] + nudge, ny)
+                @player[:y] = ny
+                @player[:x] += nudge
+                break
+              end
+              nudge += 1
+            end
+          end
         end
       end
       @player[:tx] = (@player[:x] + (PLAYER_W * 0.5).to_i).div(TILE_SIZE)

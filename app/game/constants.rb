@@ -38,12 +38,18 @@ module GameConstants
   INTERACT_DIST  = TILE_SIZE * 2
 
   # Simple red-triangle NPCs (same circle body as player).
-  NPC_COUNT                        = 6
   NPC_SPEED                        = 2
   NPC_DETECT_RADIUS_PX             = (5 * TILE_SIZE).freeze
   NPC_LOS_STEPS                    = 40
-  NPC_SPAWN_TRIES                  = 800
+  NPC_SPAWN_TRIES                  = 60
   NPC_MIN_SPAWN_TILES_FROM_PLAYER  = 4
+  NPC_INHABITED_PROBABILITY        = 0.5
+  NPC_PER_FLOOR_MIN                = 2
+  NPC_PER_FLOOR_MAX                = 5
+  NPC_OUTSIDE_MIN                  = 1
+  NPC_OUTSIDE_MAX                  = 10
+  NPC_OUTSIDE_RADIUS_TILES         = 12
+  NPC_UPDATE_RADIUS_PX             = (50 * TILE_SIZE).freeze
 
   SAVE_PATH      = 'saves/game2.sav'
   MAP_SAVE_PATH  = 'saves/game2_map.json'

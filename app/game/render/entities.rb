@@ -33,7 +33,12 @@ module GameRenderer
     cx = px + pw * 0.5
     cy = py + ph * 0.5
     r_screen = PLAYER_RADIUS * z
-    render_filled_circle_scanlines(cx, cy, r_screen, 60, 120, 220)
+    args.outputs.sprites << {
+      x: cx - r_screen, y: cy - r_screen,
+      w: r_screen * 2, h: r_screen * 2,
+      path: 'sprites/circle.png',
+      r: 60, g: 120, b: 220
+    }
 
     half_dot = (ds * 0.5).to_i
     a = @player[:face_angle]
@@ -79,24 +84,7 @@ module GameRenderer
     my = args.inputs.mouse.y
     arm = 6
     c = 55
-    args.outputs.lines << [mx - arm, my, mx + arm, my, c, c, c, 255]
-    args.outputs.lines << [mx, my - arm, mx, my + arm, c, c, c, 255]
-  end
-
-  private
-
-  # Filled disc from 1px-tall horizontal solids (no texture).
-  def render_filled_circle_scanlines(cx, cy, radius, cr, cg, cb)
-    ri = radius.round.clamp(1, 256)
-    r2 = ri * ri
-    ry = -ri
-    while ry <= ri
-      hw = Math.sqrt([0, r2 - ry * ry].max).floor
-      y = (cy + ry).round
-      x = (cx - hw).round
-      w = hw * 2 + 1
-      args.outputs.solids << { x: x, y: y, w: w, h: 1, r: cr, g: cg, b: cb }
-      ry += 1
-    end
+    args.outputs.lines << { x: mx - arm, y: my, x2: mx + arm, y2: my, r: c, g: c, b: c, a: 255 }
+    args.outputs.lines << { x: mx, y: my - arm, x2: mx, y2: my + arm, r: c, g: c, b: c, a: 255 }
   end
 end

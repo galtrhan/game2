@@ -1,4 +1,6 @@
 module GameInteraction
+  ADJACENT_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]].freeze
+
   def door_tile?(tx, ty)
     t = map_tile(tx, ty)
     t == :door || t == :locked_door
@@ -8,6 +10,22 @@ module GameInteraction
   def door_interact_target
     tx = @player[:tx]
     ty = @player[:ty]
+    fa = @player[:face_angle]
+    tick = args.state.tick_count
+    if @dit_tick == tick && @dit_tx == tx && @dit_ty == ty && @dit_fa == fa
+      return @dit_result
+    end
+
+    @dit_tick = tick
+    @dit_tx = tx
+    @dit_ty = ty
+    @dit_fa = fa
+    @dit_result = compute_door_interact_target(tx, ty)
+  end
+
+  private
+
+  def compute_door_interact_target(tx, ty)
     return [tx, ty] if door_tile?(tx, ty)
 
     d = player_facing_delta
@@ -17,13 +35,15 @@ module GameInteraction
       return [ax, ay] if door_tile?(ax, ay)
     end
 
-    [[1, 0], [-1, 0], [0, 1], [0, -1]].each do |dx, dy|
+    ADJACENT_DIRS.each do |dx, dy|
       ax = tx + dx
       ay = ty + dy
       return [ax, ay] if door_tile?(ax, ay)
     end
     nil
   end
+
+  public
 
   def toggle_door_at(tx, ty)
     fl = @player[:floor]

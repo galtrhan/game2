@@ -6,7 +6,7 @@
 - menu screen:
     - Start
         - generates new world map dynamically
-            - times genration
+            - tiles genration
             - must have loading screen
         - starts game in newly genarated world map, which expands as needed
             - when outside map has buffer zone preventing running out of map
