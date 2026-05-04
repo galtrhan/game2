@@ -34,23 +34,27 @@ module GameMap
     # Suppress native stairs in directions already covered by inbound return
     # stairs from the originating floor — avoids duplicate stairs on this floor.
     skip_deltas = pending[:return_stairs].map { |rs| rs[:return_delta] }.uniq
+
+    # Reserve return-stair tiles in @stair_data BEFORE place_structure runs, so
+    # any native stair we place can avoid overlapping their footprint.
+    stair_base = { struct_id: struct_id,
+                   bx: pending[:bx], by: pending[:by], bw: pending[:bw], bh: pending[:bh] }
+    pending[:return_stairs].each do |rs|
+      @stair_data[[target_floor, rs[:tx] + 1, rs[:ty]]] =
+        stair_base.merge(delta: rs[:return_delta], exit_dx: -1, exit_dy: 0, is_exit: false)
+      @stair_data[[target_floor, rs[:tx],      rs[:ty]]] =
+        stair_base.merge(delta: rs[:return_delta], exit_dx: -1, exit_dy: 0, is_exit: true)
+    end
+
     place_structure(pending[:bx], pending[:by], pending[:bw], pending[:bh], struct_id, target_floor, 1, skip_deltas)
 
-    # Place the explicit return stairs back to the originating floor.
-    # Return stairs are forced to the originating floor's coordinates (vertical
-    # alignment between floors), so clear any doors the regenerated layout may
-    # have placed adjacent to them — keeps the "stairs never touch doors" rule.
+    # Now stamp the actual return-stair TILES (place_structure wrote :floor / :block here).
+    # Clear any adjacent doors so the "stairs never touch doors" rule still holds.
     pending[:return_stairs].each do |rs|
       ret_tile = rs[:return_delta] == 1 ? :stair_up : :stair_dn
       clear_doors_around_return_stair!(target_floor, rs[:tx], rs[:ty])
       set_tile(target_floor, rs[:tx],     rs[:ty], ret_tile)
       set_tile(target_floor, rs[:tx] + 1, rs[:ty], ret_tile)
-      stair_base = { struct_id: struct_id,
-                     bx: pending[:bx], by: pending[:by], bw: pending[:bw], bh: pending[:bh] }
-      @stair_data[[target_floor, rs[:tx] + 1, rs[:ty]]] =
-        stair_base.merge(delta: rs[:return_delta], exit_dx: -1, exit_dy: 0, is_exit: false)
-      @stair_data[[target_floor, rs[:tx],      rs[:ty]]] =
-        stair_base.merge(delta: rs[:return_delta], exit_dx: -1, exit_dy: 0, is_exit: true)
     end
 
     spawn_npcs_for_new_floor(struct_id, target_floor) if respond_to?(:spawn_npcs_for_new_floor)
@@ -310,6 +314,12 @@ module GameMap
     return false unless get_tile_raw(floor, tx,     ty) == :floor
     return false unless get_tile_raw(floor, tx + 1, ty) == :floor
     return false unless get_tile_raw(floor, tx + 2, ty) == :floor
+
+    # Reject candidates that overlap any stair already placed on this floor
+    # (other-direction native stair, or pre-reserved return stair).
+    return false if @stair_data[[floor, tx,     ty]]
+    return false if @stair_data[[floor, tx + 1, ty]]
+    return false if @stair_data[[floor, tx + 2, ty]]
 
     north_wall = stair_wall?(floor, tx, ty - 1) && stair_wall?(floor, tx + 1, ty - 1)
     south_wall = stair_wall?(floor, tx, ty + 1) && stair_wall?(floor, tx + 1, ty + 1)

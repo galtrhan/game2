@@ -91,11 +91,22 @@ module GameMap
         tx = player_tx + dx
         ty = player_ty + dy
         next unless map_tile(tx, ty, 0) == :floor && map_tile(tx, ty + 1, 0) == :floor
+        next if tile_in_any_struct?(0, tx, ty) || tile_in_any_struct?(0, tx, ty + 1)
         candidates << { tx: tx, ty: ty }
       end
     end
     return nil if candidates.empty?
     s = candidates[rand(candidates.length)]
     { x: s[:tx] * TILE_SIZE, y: s[:ty] * TILE_SIZE, collidable: true }
+  end
+
+  def tile_in_any_struct?(floor, tx, ty)
+    smap = @structure_map[floor]
+    return false unless smap
+    cx = tx.div(CHUNK_SIZE)
+    cy = ty.div(CHUNK_SIZE)
+    chunk = smap[cx * CHUNK_STRIDE + cy]
+    return false unless chunk
+    !chunk[(ty - cy * CHUNK_SIZE) * CHUNK_SIZE + (tx - cx * CHUNK_SIZE)].nil?
   end
 end
